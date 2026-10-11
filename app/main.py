@@ -1,6 +1,10 @@
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.database import get_db
+from app.db_models import IncidentRecord
 from app.models import Incident, IncidentCreate
 
 app = FastAPI(
@@ -8,10 +12,6 @@ app = FastAPI(
     description="Evidence-driven AI incident investigation",
     version="0.2.0",
 )
-
-# Temporary storage; replaced with PostgreSQL later.
-incidents: dict[int, Incident] = {}
-next_incident_id = 1
 
 
 @app.get("/health")
@@ -28,28 +28,36 @@ def health_check():
     response_model=Incident,
     status_code=status.HTTP_201_CREATED,
 )
-def create_incident(incident_data: IncidentCreate):
-    global next_incident_id
-
-    incident = Incident(
-        id=next_incident_id,
-        **incident_data.model_dump(),
+def create_incident(
+    incident_data: IncidentCreate,
+    db: Session = Depends(get_db),
+):
+    incident = IncidentRecord(
+        title=incident_data.title,
+        description=incident_data.description,
+        service=incident_data.service,
+        severity=incident_data.severity.value,
     )
 
-    incidents[next_incident_id] = incident
-    next_incident_id += 1
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
 
     return incident
 
 
 @app.get("/incidents", response_model=list[Incident])
-def list_incidents():
-    return list(incidents.values())
+def list_incidents(db: Session = Depends(get_db)):
+    statement = select(IncidentRecord).order_by(IncidentRecord.id)
+    return db.scalars(statement).all()
 
 
 @app.get("/incidents/{incident_id}", response_model=Incident)
-def get_incident(incident_id: int):
-    incident = incidents.get(incident_id)
+def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
 
     if incident is None:
         raise HTTPException(
