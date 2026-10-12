@@ -467,3 +467,20 @@ def test_invalid_request_id_is_replaced():
         r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
         returned_id,
     )
+
+
+from unittest.mock import patch
+
+import pytest
+
+from app.config import get_database_url
+
+
+def test_missing_database_url_raises_error():
+    with patch.dict("os.environ", {}, clear=True):
+        with patch("app.config.load_dotenv"):
+            with pytest.raises(
+                RuntimeError,
+                match="DATABASE_URL is missing from the environment",
+            ):
+                get_database_url()
