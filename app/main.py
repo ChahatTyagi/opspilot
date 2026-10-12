@@ -1,3 +1,4 @@
+import logging
 from sqlalchemy.exc import SQLAlchemyError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
@@ -16,7 +17,7 @@ from app.models import (
     IncidentStatus,
     IncidentUpdate,
 )
-
+logger = logging.getLogger(__name__)
 app = FastAPI(
     title="OpsPilot",
     description="Evidence-driven AI incident investigation",
@@ -31,6 +32,7 @@ def health_check():
         "service": "opspilot-api",
         "version": "0.2.0",
     }
+
 
 
 
@@ -54,12 +56,14 @@ def create_incident(incident_data: IncidentCreate, db: Session = Depends(get_db)
         db.refresh(incident)
     except SQLAlchemyError:
         db.rollback()
+        logger.exception("Database error while creating incident")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to create incident due to a database error",
         )
 
     return incident
+
 
 
 

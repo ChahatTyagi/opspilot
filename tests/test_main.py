@@ -355,14 +355,16 @@ def test_combine_incident_filters():
 
 
 
-def test_create_incident_database_failure():
+
+def test_create_incident_database_failure(caplog):
     with (
         patch.object(
             Session,
             "commit",
             side_effect=SQLAlchemyError("Simulated database failure"),
-        ) as mock_commit,
+        ),
         patch.object(Session, "rollback") as mock_rollback,
+        caplog.at_level("ERROR", logger="app.main"),
     ):
         response = client.post(
             "/incidents",
@@ -377,10 +379,9 @@ def test_create_incident_database_failure():
     assert response.json()["detail"] == (
         "Unable to create incident due to a database error"
     )
-    mock_commit.assert_called_once()
     mock_rollback.assert_called_once()
+    assert "Database error while creating incident" in caplog.text
 
-    mock_commit.assert_called_once()
 
 
 def test_list_incidents_returns_empty_list_when_no_matches():
