@@ -393,15 +393,17 @@ def test_list_incidents_returns_empty_list_when_no_matches():
     assert response.status_code == 200
     assert response.json() == []
 
+
 def test_global_exception_handler():
     test_app = FastAPI()
 
-    from app.main import global_exception_handler
+    from app.main import global_exception_handler, request_logging_middleware
 
     test_app.add_exception_handler(
         Exception,
         global_exception_handler,
     )
+    test_app.middleware("http")(request_logging_middleware)
 
     @test_app.get("/test-unhandled-error")
     def trigger_unhandled_error():
@@ -418,3 +420,50 @@ def test_global_exception_handler():
         "detail": "An unexpected error occurred"
     }
     assert "sensitive internal details" not in response.text
+    assert response.headers.get("X-Request-ID")
+
+
+
+import re
+
+
+def test_request_id_is_generated():
+    response = client.get("/health")
+
+    request_id = response.headers.get("X-Request-ID")
+
+    assert request_id is not None
+    assert re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        request_id,
+    )
+
+
+def test_valid_request_id_is_preserved():
+    supplied_id = "opspilot-test-123"
+
+    response = client.get(
+        "/health",
+        headers={"X-Request-ID": supplied_id},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == supplied_id
+
+
+def test_invalid_request_id_is_replaced():
+    supplied_id = "invalid request id!"
+
+    response = client.get(
+        "/health",
+        headers={"X-Request-ID": supplied_id},
+    )
+
+    returned_id = response.headers["X-Request-ID"]
+
+    assert response.status_code == 200
+    assert returned_id != supplied_id
+    assert re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        returned_id,
+    )

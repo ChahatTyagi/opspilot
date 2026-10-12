@@ -1,4 +1,7 @@
 import logging
+import re
+import time
+import uuid
 from sqlalchemy.exc import SQLAlchemyError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
@@ -25,21 +28,73 @@ app = FastAPI(
     description="Evidence-driven AI incident investigation",
     version="0.2.0",
 )
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    incoming_id = request.headers.get("X-Request-ID", "")
+
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", incoming_id):
+        request_id = incoming_id
+    else:
+        request_id = str(uuid.uuid4())
+
+    request.state.request_id = request_id
+    start_time = time.perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "Request failed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+            },
+        )
+        raise
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+    response.headers["X-Request-ID"] = request_id
+
+    logger.info(
+        "Request completed",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
+
+    return response
+
 @app.exception_handler(Exception)
 async def global_exception_handler(
     request: Request,
     exc: Exception,
 ) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+
     logger.exception(
         "Unhandled exception while processing %s %s",
         request.method,
         request.url.path,
-        exc_info=exc,
+        exc_info=(type(exc), exc, exc.__traceback__),
+        extra={"request_id": request_id},
     )
-    return JSONResponse(
+
+    response = JSONResponse(
         status_code=500,
         content={"detail": "An unexpected error occurred"},
     )
+
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+
+    return response
+
 
 
 @app.get("/health")
