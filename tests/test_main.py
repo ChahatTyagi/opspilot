@@ -4,11 +4,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
+from sqlalchemy.orm import Session
 from app.database import Base, get_db
 from app.db_models import IncidentRecord
 from app.main import app
-
+from unittest.mock import patch
+from sqlalchemy.exc import SQLAlchemyError
 test_engine = create_engine(
     "sqlite://",
     connect_args={"check_same_thread": False},
@@ -351,3 +352,39 @@ def test_combine_incident_filters():
     assert response.json()[0]["environment"] == "production"
     assert response.json()[0]["severity"] == "critical"
     assert response.json()[0]["service"] == "payment"
+
+
+
+def test_create_incident_database_failure():
+    with (
+        patch.object(
+            Session,
+            "commit",
+            side_effect=SQLAlchemyError("Simulated database failure"),
+        ) as mock_commit,
+        patch.object(Session, "rollback") as mock_rollback,
+    ):
+        response = client.post(
+            "/incidents",
+            json={
+                "title": "Database failure test",
+                "description": "Testing failed incident creation.",
+                "service": "payment",
+            },
+        )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "Unable to create incident due to a database error"
+    )
+    mock_commit.assert_called_once()
+    mock_rollback.assert_called_once()
+
+    mock_commit.assert_called_once()
+
+
+def test_list_incidents_returns_empty_list_when_no_matches():
+    response = client.get("/incidents?service=nonexistent-service")
+
+    assert response.status_code == 200
+    assert response.json() == []

@@ -1,4 +1,4 @@
-
+from sqlalchemy.exc import SQLAlchemyError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 
@@ -33,31 +33,31 @@ def health_check():
     }
 
 
-@app.post(
-    "/incidents",
-    response_model=Incident,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_incident(
-    incident_data: IncidentCreate,
-    db: Session = Depends(get_db),
-):
+
+@app.post("/incidents", response_model=Incident, status_code=status.HTTP_201_CREATED)
+def create_incident(incident_data: IncidentCreate, db: Session = Depends(get_db)):
     incident = IncidentRecord(
-    title=incident_data.title,
-    description=incident_data.description,
-    service=incident_data.service,
-    environment=(
-        incident_data.environment.value
-        if incident_data.environment is not None
-        else None
-    ),
-    severity=incident_data.severity.value,
-)
+        title=incident_data.title,
+        description=incident_data.description,
+        service=incident_data.service,
+        environment=(
+            incident_data.environment.value
+            if incident_data.environment is not None
+            else None
+        ),
+        severity=incident_data.severity.value,
+    )
 
-
-    db.add(incident)
-    db.commit()
-    db.refresh(incident)
+    try:
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to create incident due to a database error",
+        )
 
     return incident
 
