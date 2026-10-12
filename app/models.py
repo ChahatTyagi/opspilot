@@ -17,11 +17,17 @@ class IncidentStatus(str, Enum):
     INVESTIGATING = "investigating"
     RESOLVED = "resolved"
 
+class IncidentEnvironment(str, Enum):
+    PRODUCTION = "production"
+    STAGING = "staging"
+    DEVELOPMENT = "development"
+
 
 class IncidentCreate(BaseModel):
     title: str = Field(min_length=3, max_length=150)
     description: str = Field(min_length=5, max_length=2000)
     service: str = Field(min_length=2, max_length=100)
+    environment: IncidentEnvironment | None = None
     severity: IncidentSeverity = IncidentSeverity.MEDIUM
 
 

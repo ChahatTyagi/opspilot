@@ -33,11 +33,17 @@ def create_incident(
     db: Session = Depends(get_db),
 ):
     incident = IncidentRecord(
-        title=incident_data.title,
-        description=incident_data.description,
-        service=incident_data.service,
-        severity=incident_data.severity.value,
-    )
+    title=incident_data.title,
+    description=incident_data.description,
+    service=incident_data.service,
+    environment=(
+        incident_data.environment.value
+        if incident_data.environment is not None
+        else None
+    ),
+    severity=incident_data.severity.value,
+)
+
 
     db.add(incident)
     db.commit()

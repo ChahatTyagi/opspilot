@@ -108,3 +108,35 @@ def test_get_missing_incident():
     response = client.get("/incidents/999")
 
     assert response.status_code == 404
+
+
+def test_create_incident_with_environment():
+    response = client.post(
+        "/incidents",
+        json={
+            "title": "Checkout latency spike",
+            "description": "Checkout requests are taking longer than expected.",
+            "service": "checkout",
+            "environment": "production",
+            "severity": "high",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["environment"] == "production"
+
+
+def test_create_incident_with_invalid_environment():
+    response = client.post(
+        "/incidents",
+        json={
+            "title": "Invalid environment test",
+            "description": "Testing environment validation.",
+            "service": "checkout",
+            "environment": "testing",
+            "severity": "high",
+        },
+    )
+
+    assert response.status_code == 422
+

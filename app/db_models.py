@@ -22,6 +22,10 @@ class IncidentRecord(Base):
     service: Mapped[str] = mapped_column(
         String(100), nullable=False
     )
+    environment: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
     severity: Mapped[str] = mapped_column(
         String(20), nullable=False
     )
