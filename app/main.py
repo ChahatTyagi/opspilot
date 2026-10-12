@@ -1,11 +1,22 @@
 
-from fastapi import Depends, FastAPI, HTTPException, status
+
+from fastapi import Depends, FastAPI, HTTPException, Query, status
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.db_models import IncidentRecord
-from app.models import Incident, IncidentCreate, IncidentUpdate
+
+from app.models import (
+    Incident,
+    IncidentCreate,
+    IncidentEnvironment,
+    IncidentSeverity,
+    IncidentStatus,
+    IncidentUpdate,
+)
+
 app = FastAPI(
     title="OpsPilot",
     description="Evidence-driven AI incident investigation",
@@ -51,10 +62,48 @@ def create_incident(
     return incident
 
 
+
 @app.get("/incidents", response_model=list[Incident])
-def list_incidents(db: Session = Depends(get_db)):
-    statement = select(IncidentRecord).order_by(IncidentRecord.id)
+def list_incidents(
+    severity: IncidentSeverity | None = None,
+    status_filter: IncidentStatus | None = None,
+    service: str | None = None,
+    environment: IncidentEnvironment | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    statement = select(IncidentRecord)
+
+    if severity is not None:
+        statement = statement.where(
+            IncidentRecord.severity == severity.value
+        )
+
+    if status_filter is not None:
+        statement = statement.where(
+            IncidentRecord.status == status_filter.value
+        )
+
+    if service is not None:
+        statement = statement.where(
+            IncidentRecord.service == service
+        )
+
+    if environment is not None:
+        statement = statement.where(
+            IncidentRecord.environment == environment.value
+        )
+
+    statement = (
+        statement
+        .order_by(IncidentRecord.id)
+        .limit(limit)
+        .offset(offset)
+    )
+
     return db.scalars(statement).all()
+
 
 
 @app.get("/incidents/{incident_id}", response_model=Incident)
