@@ -140,3 +140,55 @@ def test_create_incident_with_invalid_environment():
 
     assert response.status_code == 422
 
+
+def test_update_incident_status():
+    created = client.post(
+        "/incidents",
+        json={
+            "title": "Payment service issue",
+            "description": "Payment requests are returning errors.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+
+    incident_id = created.json()["id"]
+
+    response = client.patch(
+        f"/incidents/{incident_id}",
+        json={"status": "investigating"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "investigating"
+    assert response.json()["title"] == "Payment service issue"
+
+
+def test_update_incident_invalid_status():
+    created = client.post(
+        "/incidents",
+        json={
+            "title": "Checkout service issue",
+            "description": "Checkout requests are failing.",
+            "service": "checkout",
+        },
+    )
+
+    incident_id = created.json()["id"]
+
+    response = client.patch(
+        f"/incidents/{incident_id}",
+        json={"status": "invalid"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_missing_incident():
+    response = client.patch(
+        "/incidents/999",
+        json={"status": "resolved"},
+    )
+
+    assert response.status_code == 404
+

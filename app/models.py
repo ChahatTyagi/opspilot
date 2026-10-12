@@ -31,6 +31,10 @@ class IncidentCreate(BaseModel):
     severity: IncidentSeverity = IncidentSeverity.MEDIUM
 
 
+class IncidentUpdate(BaseModel):
+    status: IncidentStatus
+
+
 class Incident(IncidentCreate):
     id: int
     status: IncidentStatus = IncidentStatus.OPEN

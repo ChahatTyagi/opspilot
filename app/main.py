@@ -5,8 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.db_models import IncidentRecord
-from app.models import Incident, IncidentCreate
-
+from app.models import Incident, IncidentCreate, IncidentUpdate
 app = FastAPI(
     title="OpsPilot",
     description="Evidence-driven AI incident investigation",
@@ -70,5 +69,27 @@ def get_incident(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Incident {incident_id} not found",
         )
+
+    return incident
+
+
+@app.patch("/incidents/{incident_id}", response_model=Incident)
+def update_incident(
+    incident_id: int,
+    incident_data: IncidentUpdate,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident {incident_id} not found",
+        )
+
+    incident.status = incident_data.status.value
+
+    db.commit()
+    db.refresh(incident)
 
     return incident
