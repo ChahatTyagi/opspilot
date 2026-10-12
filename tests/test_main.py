@@ -10,6 +10,9 @@ from app.db_models import IncidentRecord
 from app.main import app
 from unittest.mock import patch
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi import HTTPException
+from fastapi import Request
+from fastapi import FastAPI
 test_engine = create_engine(
     "sqlite://",
     connect_args={"check_same_thread": False},
@@ -389,3 +392,29 @@ def test_list_incidents_returns_empty_list_when_no_matches():
 
     assert response.status_code == 200
     assert response.json() == []
+
+def test_global_exception_handler():
+    test_app = FastAPI()
+
+    from app.main import global_exception_handler
+
+    test_app.add_exception_handler(
+        Exception,
+        global_exception_handler,
+    )
+
+    @test_app.get("/test-unhandled-error")
+    def trigger_unhandled_error():
+        raise RuntimeError("sensitive internal details")
+
+    with TestClient(
+        test_app,
+        raise_server_exceptions=False,
+    ) as test_client:
+        response = test_client.get("/test-unhandled-error")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "detail": "An unexpected error occurred"
+    }
+    assert "sensitive internal details" not in response.text
