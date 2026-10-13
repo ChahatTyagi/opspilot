@@ -512,3 +512,40 @@ def test_readiness_check_database_unavailable():
     assert response.json() == {
         "detail": "Database is unavailable"
     }
+
+def test_update_incident_rolls_back_on_commit_failure(monkeypatch):
+    created = client.post(
+        "/incidents",
+        json={
+            "title": "Rollback test",
+            "description": "Testing a simulated database failure.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = created.json()["id"]
+
+    rollback_called = False
+    original_rollback = Session.rollback
+
+    def fail_commit(self):
+        raise SQLAlchemyError("Simulated commit failure")
+
+    def track_rollback(self):
+        nonlocal rollback_called
+        rollback_called = True
+        return original_rollback(self)
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    monkeypatch.setattr(Session, "rollback", track_rollback)
+
+    response = client.patch(
+        f"/incidents/{incident_id}",
+        json={"status": "investigating"},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "Unable to update incident due to a database error"
+    )
+    assert rollback_called is True
