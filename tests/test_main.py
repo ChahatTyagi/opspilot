@@ -484,3 +484,27 @@ def test_missing_database_url_raises_error():
                 match="DATABASE_URL is missing from the environment",
             ):
                 get_database_url()
+
+
+def test_readiness_check_database_available():
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "database": "available",
+    }
+
+
+def test_readiness_check_database_unavailable():
+    with patch.object(
+        Session,
+        "execute",
+        side_effect=SQLAlchemyError("Simulated connection failure"),
+    ):
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Database is unavailable"
+    }

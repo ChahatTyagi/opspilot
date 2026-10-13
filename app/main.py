@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -105,6 +105,22 @@ def health_check():
         "version": "0.2.0",
     }
 
+
+@app.get("/ready")
+def readiness_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        logger.exception("Database readiness check failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database is unavailable",
+        )
+
+    return {
+        "status": "ready",
+        "database": "available",
+    }
 
 
 
