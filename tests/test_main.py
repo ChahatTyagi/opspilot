@@ -167,6 +167,10 @@ def test_update_incident_status():
     assert response.json()["status"] == "investigating"
     assert response.json()["title"] == "Payment service issue"
 
+    fetched = client.get(f"/incidents/{incident_id}")
+
+    assert fetched.status_code == 200
+    assert fetched.json()["status"] == "investigating"
 
 def test_update_incident_invalid_status():
     created = client.post(
