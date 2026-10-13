@@ -230,7 +230,18 @@ def update_incident(
 
     incident.status = incident_data.status.value
 
-    db.commit()
-    db.refresh(incident)
+    try:
+        db.commit()
+        db.refresh(incident)
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception(
+            "Database error while updating incident %s",
+            incident_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update incident due to a database error",
+        )
 
     return incident
