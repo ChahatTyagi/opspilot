@@ -36,10 +36,22 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
+
+@pytest.fixture(scope="module", autouse=True)
+def configure_test_database():
+    previous_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield
+
+    if previous_override is None:
+        app.dependency_overrides.pop(get_db, None)
+    else:
+        app.dependency_overrides[get_db] = previous_override
+
+
 
 client = TestClient(app)
-
 
 @pytest.fixture(autouse=True)
 def reset_incidents():
