@@ -11,7 +11,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_index("ix_incidents_id", table_name="incidents")
+    op.execute("DROP INDEX IF EXISTS ix_incidents_id")
 
 
 def downgrade() -> None:
