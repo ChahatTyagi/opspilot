@@ -561,3 +561,8 @@ def test_update_incident_rolls_back_on_commit_failure(monkeypatch):
         "Unable to update incident due to a database error"
     )
     assert rollback_called is True
+
+    fetched = client.get(f"/incidents/{incident_id}")
+
+    assert fetched.status_code == 200
+    assert fetched.json()["status"] == "open"
