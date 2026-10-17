@@ -31,7 +31,12 @@ database_url = os.getenv("DATABASE_URL")
 if not database_url:
     raise RuntimeError("DATABASE_URL is missing from the environment")
 
-config.set_main_option("sqlalchemy.url", database_url)
+config.set_section_option(
+    config.config_ini_section,
+    "sqlalchemy.url",
+    database_url.replace("%", "%%"),
+)
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
