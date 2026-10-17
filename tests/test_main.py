@@ -566,3 +566,13 @@ def test_update_incident_rolls_back_on_commit_failure(monkeypatch):
 
     assert fetched.status_code == 200
     assert fetched.json()["status"] == "open"
+
+    
+def test_get_db_closes_session():
+    db_generator = get_db()
+    db = next(db_generator)
+
+    with patch.object(Session, "close", autospec=True) as mock_close:
+        db_generator.close()
+
+    mock_close.assert_called_once_with(db)
