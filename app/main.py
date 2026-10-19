@@ -25,8 +25,11 @@ from app.models import (
     EvidenceCounts,
     InvestigationContext,
 )
+from app.analyzer import analyze_evidence
+from app.models import EvidenceAnalysisResponse
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
 logger = logging.getLogger(__name__)
 app = FastAPI(
     title="OpsPilot",
@@ -373,3 +376,31 @@ def get_investigation_context(
         evidence_counts=counts,
         evidence=evidence,
     )
+@app.get(
+    "/incidents/{incident_id}/analyze",
+    response_model=EvidenceAnalysisResponse,
+)
+def analyze_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident {incident_id} not found",
+        )
+
+    statement = (
+        select(IncidentEvidence)
+        .where(IncidentEvidence.incident_id == incident_id)
+        .order_by(
+            IncidentEvidence.created_at,
+            IncidentEvidence.id,
+        )
+    )
+
+    evidence = list(db.scalars(statement).all())
+
+    return analyze_evidence(incident_id, evidence)

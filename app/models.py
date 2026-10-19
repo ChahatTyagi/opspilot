@@ -82,3 +82,17 @@ class InvestigationContext(BaseModel):
     evidence_count: int
     evidence_counts: EvidenceCounts
     evidence: list[IncidentEvidenceResponse]
+
+
+class ErrorPatternResponse(BaseModel):
+    pattern: str
+    occurrences: int
+    evidence_ids: list[int]
+
+
+class EvidenceAnalysisResponse(BaseModel):
+    incident_id: int
+    logs_analyzed: int
+    error_lines_detected: int
+    recurring_patterns: list[ErrorPatternResponse]
+    findings: list[str]
