@@ -41,3 +41,24 @@ class Incident(IncidentCreate):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+
+
+class EvidenceSourceType(str, Enum):
+    LOG = "log"
+    METRIC = "metric"
+    TRACE = "trace"
+    DEPLOYMENT = "deployment"
+    NOTE = "note"
+
+
+class IncidentEvidenceCreate(BaseModel):
+    source_type: EvidenceSourceType
+    content: str = Field(min_length=1, max_length=20000)
+
+
+class IncidentEvidenceResponse(BaseModel):
+    id: int
+    incident_id: int
+    source_type: EvidenceSourceType
+    content: str
+    created_at: datetime

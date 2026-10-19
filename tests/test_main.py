@@ -609,7 +609,7 @@ def test_incident_evidence_is_persisted():
         assert saved_evidence.content == (
             "Database connection timeout observed."
         )
-        
+
 def test_deleting_incident_deletes_its_evidence():
     with TestSessionLocal() as db:
         incident = IncidentRecord(
@@ -638,3 +638,140 @@ def test_deleting_incident_deletes_its_evidence():
         saved_evidence = db.get(IncidentEvidence, evidence_id)
 
         assert saved_evidence is None
+
+
+def test_create_incident_evidence():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    response = client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "log",
+            "content": "Database connection timeout observed.",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["incident_id"] == incident_id
+    assert body["source_type"] == "log"
+    assert body["content"] == (
+        "Database connection timeout observed."
+    )
+    assert body["id"] > 0
+
+
+def test_list_incident_evidence():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "log",
+            "content": "Connection timeout.",
+        },
+    )
+    client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "metric",
+            "content": "Error rate increased to 40%.",
+        },
+    )
+
+    response = client.get(
+        f"/incidents/{incident_id}/evidence"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+    assert {item["source_type"] for item in body} == {
+        "log",
+        "metric",
+    }
+
+
+def test_create_evidence_for_missing_incident():
+    response = client.post(
+        "/incidents/999999/evidence",
+        json={
+            "source_type": "log",
+            "content": "Connection timeout.",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_list_evidence_for_missing_incident():
+    response = client.get(
+        "/incidents/999999/evidence"
+    )
+
+    assert response.status_code == 404
+
+
+def test_create_evidence_rejects_invalid_source_type():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    response = client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "random",
+            "content": "Some evidence.",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_evidence_rejects_empty_content():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    response = client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "log",
+            "content": "",
+        },
+    )
+
+    assert response.status_code == 422

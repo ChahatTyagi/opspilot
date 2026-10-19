@@ -10,7 +10,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.db_models import IncidentRecord
+from app.db_models import IncidentEvidence, IncidentRecord
 
 from app.models import (
     Incident,
@@ -19,6 +19,8 @@ from app.models import (
     IncidentSeverity,
     IncidentStatus,
     IncidentUpdate,
+    IncidentEvidenceCreate,
+    IncidentEvidenceResponse,
 )
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -245,3 +247,68 @@ def update_incident(
         )
 
     return incident
+
+@app.post(
+    "/incidents/{incident_id}/evidence",
+    response_model=IncidentEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_incident_evidence(
+    incident_id: int,
+    evidence_data: IncidentEvidenceCreate,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    evidence = IncidentEvidence(
+        incident_id=incident_id,
+        source_type=evidence_data.source_type.value,
+        content=evidence_data.content,
+    )
+
+    try:
+        db.add(evidence)
+        db.commit()
+        db.refresh(evidence)
+        return evidence
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception(
+            "Failed to create incident evidence for incident %s",
+            incident_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save incident evidence",
+        ) from exc
+
+
+@app.get(
+    "/incidents/{incident_id}/evidence",
+    response_model=list[IncidentEvidenceResponse],
+)
+def list_incident_evidence(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    statement = (
+        select(IncidentEvidence)
+        .where(IncidentEvidence.incident_id == incident_id)
+        .order_by(IncidentEvidence.created_at, IncidentEvidence.id)
+    )
+
+    return list(db.scalars(statement).all())
