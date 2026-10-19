@@ -78,3 +78,59 @@ def test_normalization_replaces_variable_numbers():
     second = normalize_error("ERROR request 456 failed")
 
     assert first == second
+
+def test_filters_generic_recurring_errors():
+    evidence = [
+        make_evidence(1, "log", "ERROR something failed"),
+        make_evidence(2, "log", "ERROR something failed"),
+    ]
+
+    result = analyze_evidence(7, evidence)
+
+    assert result.error_lines_detected == 2
+    assert result.recurring_patterns == []
+
+
+def test_keeps_specific_recurring_database_errors():
+    evidence = [
+        make_evidence(
+            1,
+            "log",
+            "ERROR database connection failed for request 123",
+        ),
+        make_evidence(
+            2,
+            "log",
+            "ERROR database connection failed for request 456",
+        ),
+    ]
+
+    result = analyze_evidence(7, evidence)
+
+    assert len(result.recurring_patterns) == 1
+    assert result.recurring_patterns[0].occurrences == 2
+    assert result.recurring_patterns[0].evidence_ids == [1, 2]
+
+def test_evidence_ids_are_unique_when_log_repeats_pattern():
+    evidence = [
+        make_evidence(
+            1,
+            "log",
+            (
+                "ERROR database connection failed for request 123\n"
+                "ERROR database connection failed for request 456"
+            ),
+        ),
+        make_evidence(
+            2,
+            "log",
+            "ERROR database connection failed for request 789",
+        ),
+    ]
+
+    result = analyze_evidence(7, evidence)
+
+    assert len(result.recurring_patterns) == 1
+    pattern = result.recurring_patterns[0]
+    assert pattern.occurrences == 3
+    assert pattern.evidence_ids == [1, 2]

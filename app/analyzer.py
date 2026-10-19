@@ -46,6 +46,21 @@ def normalize_error(line: str) -> str:
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized[:500]
 
+def is_actionable_pattern(pattern: str) -> bool:
+    normalized = pattern.lower()
+
+    generic_fragments = (
+        "error occurred",
+        "something failed",
+        "request failed",
+        "error failed",
+        "error error",
+    )
+
+    return not any(
+        fragment in normalized
+        for fragment in generic_fragments
+    )
 
 def analyze_evidence(incident_id: int, evidence: list) -> EvidenceAnalysis:
     """Group recurring error patterns found in log evidence."""
@@ -76,6 +91,7 @@ def analyze_evidence(incident_id: int, evidence: list) -> EvidenceAnalysis:
         )
         for pattern, evidence_ids in groups.items()
         if len(evidence_ids) >= 2
+        and is_actionable_pattern(pattern)
     ]
 
     recurring_patterns.sort(
