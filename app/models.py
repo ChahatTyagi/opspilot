@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class IncidentSeverity(str, Enum):
@@ -36,6 +36,8 @@ class IncidentUpdate(BaseModel):
 
 
 class Incident(IncidentCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     status: IncidentStatus = IncidentStatus.OPEN
     created_at: datetime = Field(
@@ -57,8 +59,26 @@ class IncidentEvidenceCreate(BaseModel):
 
 
 class IncidentEvidenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     incident_id: int
     source_type: EvidenceSourceType
     content: str
     created_at: datetime
+
+class EvidenceCounts(BaseModel):
+    log: int = 0
+    metric: int = 0
+    trace: int = 0
+    deployment: int = 0
+    note: int = 0
+
+
+class InvestigationContext(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    incident: Incident
+    evidence_count: int
+    evidence_counts: EvidenceCounts
+    evidence: list[IncidentEvidenceResponse]

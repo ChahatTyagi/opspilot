@@ -873,3 +873,80 @@ def test_incident_evidence_rejects_invalid_pagination():
     )
 
     assert response.status_code == 422
+
+
+def test_investigation_context_includes_incident_and_evidence():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    for source_type, content in [
+        ("log", "Database connection timeout."),
+        ("log", "Connection retry failed."),
+        ("metric", "Error rate reached 40%."),
+        ("deployment", "Version 2.4.1 deployed."),
+    ]:
+        response = client.post(
+            f"/incidents/{incident_id}/evidence",
+            json={
+                "source_type": source_type,
+                "content": content,
+            },
+        )
+        assert response.status_code == 201
+
+    response = client.get(
+        f"/incidents/{incident_id}/investigation-context"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["incident"]["id"] == incident_id
+    assert body["evidence_count"] == 4
+    assert body["evidence_counts"] == {
+        "log": 2,
+        "metric": 1,
+        "trace": 0,
+        "deployment": 1,
+        "note": 0,
+    }
+    assert len(body["evidence"]) == 4
+
+
+def test_investigation_context_with_no_evidence():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "New service incident",
+            "description": "Service latency increased.",
+            "service": "checkout",
+            "severity": "medium",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    response = client.get(
+        f"/incidents/{incident_id}/investigation-context"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence_count"] == 0
+    assert body["evidence"] == []
+    assert body["evidence_counts"]["log"] == 0
+
+
+def test_investigation_context_for_missing_incident():
+    response = client.get(
+        "/incidents/999999/investigation-context"
+    )
+
+    assert response.status_code == 404

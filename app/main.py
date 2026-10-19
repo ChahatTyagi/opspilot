@@ -21,7 +21,9 @@ from app.models import (
     IncidentUpdate,
     IncidentEvidenceCreate,
     IncidentEvidenceResponse,
-    EvidenceSourceType
+    EvidenceSourceType,
+    EvidenceCounts,
+    InvestigationContext,
 )
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -294,11 +296,6 @@ def create_incident_evidence(
     "/incidents/{incident_id}/evidence",
     response_model=list[IncidentEvidenceResponse],
 )
-
-@app.get(
-    "/incidents/{incident_id}/evidence",
-    response_model=list[IncidentEvidenceResponse],
-)
 def list_incident_evidence(
     incident_id: int,
     source_type: EvidenceSourceType | None = None,
@@ -334,3 +331,45 @@ def list_incident_evidence(
     )
 
     return list(db.scalars(statement).all())
+
+
+@app.get(
+    "/incidents/{incident_id}/investigation-context",
+    response_model=InvestigationContext,
+)
+def get_investigation_context(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident {incident_id} not found",
+        )
+
+    statement = (
+        select(IncidentEvidence)
+        .where(IncidentEvidence.incident_id == incident_id)
+        .order_by(
+            IncidentEvidence.created_at,
+            IncidentEvidence.id,
+        )
+    )
+    evidence = list(db.scalars(statement).all())
+
+    counts = EvidenceCounts()
+    for item in evidence:
+        setattr(
+            counts,
+            item.source_type,
+            getattr(counts, item.source_type) + 1,
+        )
+
+    return InvestigationContext(
+        incident=incident,
+        evidence_count=len(evidence),
+        evidence_counts=counts,
+        evidence=evidence,
+    )
