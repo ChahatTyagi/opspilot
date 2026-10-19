@@ -1,23 +1,25 @@
-
 import pytest
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlalchemy.orm import Session
-from app.database import Base, get_db
-from app.db_models import IncidentRecord
-from app.main import app
-from unittest.mock import patch
+from sqlalchemy import create_engine, event
 from sqlalchemy.exc import SQLAlchemyError
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import FastAPI
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+from unittest.mock import patch
+
+from app.database import Base, get_db
+from app.db_models import IncidentEvidence, IncidentRecord
+from app.main import app
 test_engine = create_engine(
     "sqlite://",
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+@event.listens_for(test_engine, "connect")
+def enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 TestSessionLocal = sessionmaker(
     bind=test_engine,
@@ -576,3 +578,63 @@ def test_get_db_closes_session():
         db_generator.close()
 
     mock_close.assert_called_once_with(db)
+
+def test_incident_evidence_is_persisted():
+    with TestSessionLocal() as db:
+        incident = IncidentRecord(
+            title="Payment service unavailable",
+            description="Payment requests are failing.",
+            service="payment",
+            environment="test",
+            severity="high",
+        )
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
+
+        evidence = IncidentEvidence(
+            incident_id=incident.id,
+            source_type="log",
+            content="Database connection timeout observed.",
+        )
+        db.add(evidence)
+        db.commit()
+        db.refresh(evidence)
+
+        saved_evidence = db.get(IncidentEvidence, evidence.id)
+
+        assert saved_evidence is not None
+        assert saved_evidence.incident_id == incident.id
+        assert saved_evidence.source_type == "log"
+        assert saved_evidence.content == (
+            "Database connection timeout observed."
+        )
+        
+def test_deleting_incident_deletes_its_evidence():
+    with TestSessionLocal() as db:
+        incident = IncidentRecord(
+            title="Payment service unavailable",
+            description="Payment requests are failing.",
+            service="payment",
+            environment="test",
+            severity="high",
+        )
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
+
+        evidence = IncidentEvidence(
+            incident_id=incident.id,
+            source_type="log",
+            content="Database connection timeout observed.",
+        )
+        db.add(evidence)
+        db.commit()
+        evidence_id = evidence.id
+
+        db.delete(incident)
+        db.commit()
+
+        saved_evidence = db.get(IncidentEvidence, evidence_id)
+
+        assert saved_evidence is None
