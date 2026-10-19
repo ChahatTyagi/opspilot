@@ -775,3 +775,101 @@ def test_create_evidence_rejects_empty_content():
     )
 
     assert response.status_code == 422
+
+
+def test_filter_incident_evidence_by_source_type():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    for source_type, content in [
+        ("log", "Connection timeout."),
+        ("metric", "Error rate reached 40%."),
+        ("log", "Database retry failed."),
+    ]:
+        response = client.post(
+            f"/incidents/{incident_id}/evidence",
+            json={
+                "source_type": source_type,
+                "content": content,
+            },
+        )
+        assert response.status_code == 201
+
+    response = client.get(
+        f"/incidents/{incident_id}/evidence",
+        params={"source_type": "log"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+    assert all(item["source_type"] == "log" for item in body)
+
+
+def test_incident_evidence_pagination():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    for index in range(3):
+        response = client.post(
+            f"/incidents/{incident_id}/evidence",
+            json={
+                "source_type": "log",
+                "content": f"Log entry number {index}.",
+            },
+        )
+        assert response.status_code == 201
+
+    first_page = client.get(
+        f"/incidents/{incident_id}/evidence",
+        params={"limit": 2, "offset": 0},
+    )
+    second_page = client.get(
+        f"/incidents/{incident_id}/evidence",
+        params={"limit": 2, "offset": 2},
+    )
+
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    assert len(first_page.json()) == 2
+    assert len(second_page.json()) == 1
+    assert (
+        first_page.json()[0]["id"]
+        != second_page.json()[0]["id"]
+    )
+
+
+def test_incident_evidence_rejects_invalid_pagination():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    response = client.get(
+        f"/incidents/{incident_id}/evidence",
+        params={"limit": 101},
+    )
+
+    assert response.status_code == 422

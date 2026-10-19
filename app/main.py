@@ -21,6 +21,7 @@ from app.models import (
     IncidentUpdate,
     IncidentEvidenceCreate,
     IncidentEvidenceResponse,
+    EvidenceSourceType
 )
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -293,8 +294,16 @@ def create_incident_evidence(
     "/incidents/{incident_id}/evidence",
     response_model=list[IncidentEvidenceResponse],
 )
+
+@app.get(
+    "/incidents/{incident_id}/evidence",
+    response_model=list[IncidentEvidenceResponse],
+)
 def list_incident_evidence(
     incident_id: int,
+    source_type: EvidenceSourceType | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
     incident = db.get(IncidentRecord, incident_id)
@@ -305,10 +314,23 @@ def list_incident_evidence(
             detail="Incident not found",
         )
 
+    statement = select(IncidentEvidence).where(
+        IncidentEvidence.incident_id == incident_id
+    )
+
+    if source_type is not None:
+        statement = statement.where(
+            IncidentEvidence.source_type == source_type.value
+        )
+
     statement = (
-        select(IncidentEvidence)
-        .where(IncidentEvidence.incident_id == incident_id)
-        .order_by(IncidentEvidence.created_at, IncidentEvidence.id)
+        statement
+        .order_by(
+            IncidentEvidence.created_at,
+            IncidentEvidence.id,
+        )
+        .limit(limit)
+        .offset(offset)
     )
 
     return list(db.scalars(statement).all())
