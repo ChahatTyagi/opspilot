@@ -950,3 +950,79 @@ def test_investigation_context_for_missing_incident():
     )
 
     assert response.status_code == 404
+
+
+def test_get_investigation_report():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Database connection failures",
+            "description": "Database requests are failing.",
+            "service": "payment-service",
+            "severity": "high",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    evidence_response = client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "log",
+            "content": (
+                "ERROR database connection failed for request 123"
+            ),
+        },
+    )
+    assert evidence_response.status_code == 201
+
+    response = client.get(
+        f"/incidents/{incident_id}/report"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["incident_id"] == incident_id
+    assert body["incident_title"] == "Database connection failures"
+    assert body["service"] == "payment-service"
+    assert body["severity"] == "high"
+    assert body["evidence_count"] == 1
+    assert isinstance(body["observed_findings"], list)
+    assert isinstance(body["recurring_patterns"], list)
+    assert isinstance(body["hypotheses"], list)
+    assert isinstance(body["recommended_checks"], list)
+    assert isinstance(body["evidence_gaps"], list)
+
+
+def test_get_investigation_report_without_evidence():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Checkout latency",
+            "description": "Checkout requests are slow.",
+            "service": "checkout",
+            "severity": "medium",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    response = client.get(
+        f"/incidents/{incident_id}/report"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["evidence_count"] == 0
+    assert body["recurring_patterns"] == []
+    assert body["hypotheses"] == []
+    assert body["evidence_gaps"]
+    assert body["recommended_checks"]
+
+
+def test_get_investigation_report_for_missing_incident():
+    response = client.get("/incidents/999999/report")
+
+    assert response.status_code == 404
