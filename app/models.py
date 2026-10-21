@@ -96,3 +96,24 @@ class EvidenceAnalysisResponse(BaseModel):
     error_lines_detected: int
     recurring_patterns: list[ErrorPatternResponse]
     findings: list[str]
+
+class InvestigationReportResponse(BaseModel):
+    incident_id: int
+    incident_title: str
+    service: str
+    severity: IncidentSeverity
+    status: IncidentStatus
+    evidence_count: int = Field(ge=0)
+
+    # Facts supported by the collected evidence
+    observed_findings: list[str]
+    recurring_patterns: list[ErrorPatternResponse]
+
+    # Possible explanations, not confirmed root causes
+    hypotheses: list[str]
+
+    # Actions an engineer can take to investigate
+    recommended_checks: list[str]
+
+    # Missing information that limits the investigation
+    evidence_gaps: list[str]
