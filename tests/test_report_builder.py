@@ -1,4 +1,4 @@
-
+import pytest
 from types import SimpleNamespace
 
 from app.report_builder import build_investigation_report
@@ -61,6 +61,7 @@ def test_report_handles_empty_evidence():
     assert report.hypotheses == []
     assert report.evidence_gaps
     assert report.recommended_checks
+    assert report.retrieved_evidence == []
 
 
 def test_report_uses_metrics_and_deployments_when_available():
@@ -130,3 +131,51 @@ def test_report_includes_retrieved_evidence():
     assert result.chunk_index == 0
     assert result.text == "ERROR database connection failed"
     assert result.score == 0.92
+
+def test_report_handles_no_retrieval_results():
+    class EmptyRetriever:
+        def retrieve(self, query, evidence_items, top_k):
+            assert evidence_items
+            assert top_k == 5
+            return []
+
+    evidence = [
+        make_evidence(
+            "log",
+            "ERROR database connection failed",
+            10,
+        )
+    ]
+
+    report = build_investigation_report(
+        make_incident(),
+        evidence,
+        retriever=EmptyRetriever(),
+    )
+
+    assert report.evidence_count == 1
+    assert report.retrieved_evidence == []
+    assert report.observed_findings
+
+def test_report_propagates_retrieval_failure():
+    class BrokenRetriever:
+        def retrieve(self, query, evidence_items, top_k):
+            raise RuntimeError("embedding service failed")
+
+    evidence = [
+        make_evidence(
+            "log",
+            "ERROR database connection failed",
+            10,
+        )
+    ]
+
+    with pytest.raises(
+        RuntimeError,
+        match="embedding service failed",
+    ):
+        build_investigation_report(
+            make_incident(),
+            evidence,
+            retriever=BrokenRetriever(),
+        )
