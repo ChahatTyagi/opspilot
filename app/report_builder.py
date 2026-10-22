@@ -4,16 +4,43 @@ from app.db_models import IncidentEvidence, IncidentRecord
 from app.models import (
     ErrorPatternResponse,
     InvestigationReportResponse,
+    RetrievedEvidenceResponse,
 )
-
+from app.retrieval_service import EvidenceRetriever
 
 def build_investigation_report(
     incident: IncidentRecord,
     evidence: list[IncidentEvidence],
+    retriever: EvidenceRetriever | None = None,
 ) -> InvestigationReportResponse:
     """Build an evidence-grounded report without guessing root causes."""
 
     analysis = analyze_evidence(incident.id, evidence)
+    retrieved_evidence = []
+
+    if retriever is not None and evidence:
+        query = (
+            f"Investigate incident '{incident.title}' "
+            f"affecting service '{incident.service}'. "
+            f"Description: {getattr(incident, 'description', '')}"
+        )
+
+        results = retriever.retrieve(
+            query=query,
+            evidence_items=evidence,
+            top_k=5,
+        )
+
+        retrieved_evidence = [
+            RetrievedEvidenceResponse(
+                evidence_id=result.chunk.evidence_id,
+                source_type=result.chunk.source_type,
+                chunk_index=result.chunk.chunk_index,
+                text=result.chunk.text,
+                score=result.score,
+            )
+            for result in results
+        ]
 
     observed_findings = list(analysis.findings)
     hypotheses: list[str] = []
@@ -101,4 +128,5 @@ def build_investigation_report(
         hypotheses=hypotheses,
         recommended_checks=recommended_checks,
         evidence_gaps=evidence_gaps,
+        retrieved_evidence=retrieved_evidence,
     )

@@ -31,12 +31,14 @@ from app.models import EvidenceAnalysisResponse
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from app.report_builder import build_investigation_report
+from app.retrieval_service import EvidenceRetriever
 logger = logging.getLogger(__name__)
 app = FastAPI(
     title="OpsPilot",
     description="Evidence-driven AI incident investigation",
     version="0.2.0",
 )
+app.state.evidence_retriever = EvidenceRetriever()
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     incoming_id = request.headers.get("X-Request-ID", "")
@@ -406,31 +408,31 @@ def analyze_incident(
 
     return analyze_evidence(incident_id, evidence)
 
-
 @app.get(
     "/incidents/{incident_id}/report",
     response_model=InvestigationReportResponse,
 )
 def get_investigation_report(
     incident_id: int,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     incident = db.get(IncidentRecord, incident_id)
-
     if incident is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail=f"Incident {incident_id} not found",
         )
 
     statement = (
         select(IncidentEvidence)
         .where(IncidentEvidence.incident_id == incident_id)
-        .order_by(
-            IncidentEvidence.created_at,
-            IncidentEvidence.id,
-        )
+        .order_by(IncidentEvidence.created_at, IncidentEvidence.id)
     )
     evidence = list(db.scalars(statement).all())
 
-    return build_investigation_report(incident, evidence)
+    return build_investigation_report(
+        incident,
+        evidence,
+        retriever=request.app.state.evidence_retriever,
+    )

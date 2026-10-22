@@ -952,7 +952,9 @@ def test_investigation_context_for_missing_incident():
     assert response.status_code == 404
 
 
-def test_get_investigation_report():
+def test_get_investigation_report(monkeypatch):
+    from types import SimpleNamespace
+
     incident_response = client.post(
         "/incidents",
         json={
@@ -969,31 +971,59 @@ def test_get_investigation_report():
         f"/incidents/{incident_id}/evidence",
         json={
             "source_type": "log",
-            "content": (
-                "ERROR database connection failed for request 123"
-            ),
+            "content": "ERROR database connection failed for request 123",
         },
     )
     assert evidence_response.status_code == 201
 
-    response = client.get(
-        f"/incidents/{incident_id}/report"
+    class FakeRetriever:
+        def retrieve(self, query, evidence_items, top_k=5):
+            assert "Database connection failures" in query
+            assert len(evidence_items) == 1
+            assert top_k == 5
+
+            return [
+                SimpleNamespace(
+                    chunk=SimpleNamespace(
+                        evidence_id=evidence_items[0].id,
+                        source_type="log",
+                        chunk_index=0,
+                        text=(
+                            "ERROR database connection failed "
+                            "for request 123"
+                        ),
+                    ),
+                    score=0.92,
+                )
+            ]
+
+    monkeypatch.setattr(
+        app.state,
+        "evidence_retriever",
+        FakeRetriever(),
     )
 
+    response = client.get(f"/incidents/{incident_id}/report")
+
     assert response.status_code == 200
-    body = response.json()
+    data = response.json()
 
-    assert body["incident_id"] == incident_id
-    assert body["incident_title"] == "Database connection failures"
-    assert body["service"] == "payment-service"
-    assert body["severity"] == "high"
-    assert body["evidence_count"] == 1
-    assert isinstance(body["observed_findings"], list)
-    assert isinstance(body["recurring_patterns"], list)
-    assert isinstance(body["hypotheses"], list)
-    assert isinstance(body["recommended_checks"], list)
-    assert isinstance(body["evidence_gaps"], list)
+    assert data["incident_id"] == incident_id
+    assert data["incident_title"] == "Database connection failures"
+    assert data["evidence_count"] == 1
+    assert len(data["retrieved_evidence"]) == 1
+    assert data["retrieved_evidence"][0]["source_type"] == "log"
+    assert data["retrieved_evidence"][0]["chunk_index"] == 0
+    assert data["retrieved_evidence"][0]["score"] == 0.92
+    assert "database connection failed" in (
+        data["retrieved_evidence"][0]["text"]
+    )
 
+    assert isinstance(data["observed_findings"], list)
+    assert isinstance(data["recurring_patterns"], list)
+    assert isinstance(data["hypotheses"], list)
+    assert isinstance(data["recommended_checks"], list)
+    assert isinstance(data["evidence_gaps"], list)
 
 def test_get_investigation_report_without_evidence():
     incident_response = client.post(

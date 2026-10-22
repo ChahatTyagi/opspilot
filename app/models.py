@@ -97,6 +97,13 @@ class EvidenceAnalysisResponse(BaseModel):
     recurring_patterns: list[ErrorPatternResponse]
     findings: list[str]
 
+class RetrievedEvidenceResponse(BaseModel):
+    evidence_id: int
+    source_type: str
+    chunk_index: int
+    text: str
+    score: float
+
 class InvestigationReportResponse(BaseModel):
     incident_id: int
     incident_title: str
@@ -104,6 +111,9 @@ class InvestigationReportResponse(BaseModel):
     severity: IncidentSeverity
     status: IncidentStatus
     evidence_count: int = Field(ge=0)
+    retrieved_evidence: list[RetrievedEvidenceResponse] = Field(
+        default_factory=list
+    )
 
     # Facts supported by the collected evidence
     observed_findings: list[str]
