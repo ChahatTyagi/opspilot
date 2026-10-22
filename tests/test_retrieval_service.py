@@ -82,3 +82,52 @@ def test_retrieve_respects_top_k():
     )
 
     assert len(results) == 1
+
+
+class CountingFakeEmbedder(FakeEmbedder):
+    def __init__(self):
+        self.calls = []
+
+    def embed_texts(self, texts):
+        self.calls.append(list(texts))
+        return super().embed_texts(texts)
+
+
+def test_retrieve_reuses_cached_evidence_embeddings():
+    embedder = CountingFakeEmbedder()
+    retriever = EvidenceRetriever(embedder=embedder)
+    evidence = [
+        make_evidence(1, "Database connection pool exhausted"),
+        make_evidence(2, "Frontend styling changed"),
+    ]
+
+    retriever.retrieve("Why is payment failing?", evidence)
+    first_call_count = len(embedder.calls)
+
+    retriever.retrieve("What caused the payment issue?", evidence)
+
+    assert len(embedder.calls) == first_call_count + 1
+    assert embedder.calls[-1] == [
+        "What caused the payment issue?"
+    ]
+
+
+def test_retrieve_cache_respects_maximum_size():
+    embedder = CountingFakeEmbedder()
+    retriever = EvidenceRetriever(
+        embedder=embedder,
+        cache_size=1,
+    )
+    evidence = [
+        make_evidence(1, "Database connection pool exhausted"),
+        make_evidence(2, "Frontend styling changed"),
+    ]
+
+    retriever.retrieve("Why is payment failing?", evidence)
+
+    assert len(retriever._embedding_cache) == 1
+
+
+def test_retrieve_rejects_invalid_cache_size():
+    with pytest.raises(ValueError, match="cache_size must be positive"):
+        EvidenceRetriever(embedder=FakeEmbedder(), cache_size=0)
