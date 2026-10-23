@@ -1,4 +1,4 @@
-
+import re
 from app.embeddings import LocalEmbedder
 from app.retrieval import cosine_similarity
 
@@ -84,8 +84,37 @@ CASES = [
 ]
 
 TOP_K = 5
+EVAL_K = 3
+def lexical_overlap(query: str, text: str) -> float:
+    """Measure the proportion of query terms present in the text."""
+    query_terms = set(re.findall(r"\b[a-z0-9]+\b", query.lower()))
+    text_terms = set(re.findall(r"\b[a-z0-9]+\b", text.lower()))
 
+    if not query_terms:
+        return 0.0
 
+    return len(query_terms & text_terms) / len(query_terms)
+
+def rerank_with_lexical_overlap(query, ranked, alpha=0.8):
+    """Experimentally combine semantic and lexical relevance."""
+    reranked = []
+
+    for semantic_score, text, relevant in ranked:
+        lexical_score = lexical_overlap(query, text)
+        combined_score = (
+            alpha * semantic_score
+            + (1 - alpha) * lexical_score
+        )
+
+        reranked.append(
+            (combined_score, text, relevant)
+        )
+
+    return sorted(
+        reranked,
+        key=lambda item: item[0],
+        reverse=True,
+    )
 def evaluate_case(embedder, case):
     candidates = case["candidates"]
     texts = [text for text, _ in candidates]
@@ -105,9 +134,28 @@ def evaluate_case(embedder, case):
         reverse=True,
     )
 
-    relevant_total = sum(relevant for _, _, relevant in ranked)
+    relevant_total = sum(
+        relevant for _, _, relevant in ranked
+    )
+
     relevant_top_k = sum(
         relevant for _, _, relevant in ranked[:TOP_K]
+    )
+
+    relevant_top_3 = sum(
+        relevant for _, _, relevant in ranked[:EVAL_K]
+    )
+
+    recall_at_5 = (
+        relevant_top_k / relevant_total
+        if relevant_total
+        else 0.0
+    )
+
+    recall_at_3 = (
+        relevant_top_3 / relevant_total
+        if relevant_total
+        else 0.0
     )
 
     first_relevant_rank = next(
@@ -119,50 +167,122 @@ def evaluate_case(embedder, case):
         None,
     )
 
-    recall = (
-        relevant_top_k / relevant_total
-        if relevant_total
-        else 0.0
-    )
     reciprocal_rank = (
         1 / first_relevant_rank
         if first_relevant_rank
         else 0.0
     )
 
-    return ranked, recall, reciprocal_rank
+    return ranked, recall_at_5, recall_at_3, reciprocal_rank
 
 
 def main():
     embedder = LocalEmbedder()
-    recalls = []
+
+    recalls_at_5 = []
+    recalls_at_3 = []
     reciprocal_ranks = []
+    experimental_recalls_at_5 = []
+    experimental_recalls_at_3 = []
+    experimental_reciprocal_ranks = []
 
     for index, case in enumerate(CASES, start=1):
-        ranked, recall, reciprocal_rank = evaluate_case(
-            embedder, case
-        )
+        (
+            ranked,
+            recall_at_5,
+            recall_at_3,
+            reciprocal_rank,
+        ) = evaluate_case(embedder, case)
 
-        recalls.append(recall)
+        recalls_at_5.append(recall_at_5)
+        recalls_at_3.append(recall_at_3)
         reciprocal_ranks.append(reciprocal_rank)
 
+        experimental_ranked = rerank_with_lexical_overlap(
+            case["query"], ranked
+        )
+
+        relevant_total = sum(
+            relevant for _, _, relevant in experimental_ranked
+        )
+
+        experimental_recalls_at_5.append(
+            sum(
+                relevant
+                for _, _, relevant in experimental_ranked[:TOP_K]
+            ) / relevant_total if relevant_total else 0.0
+        )
+
+        experimental_recalls_at_3.append(
+            sum(
+                relevant
+                for _, _, relevant in experimental_ranked[:EVAL_K]
+            ) / relevant_total if relevant_total else 0.0
+        )
+
+        first_relevant_rank = next(
+            (
+                rank
+                for rank, (_, _, relevant) in enumerate(
+                    experimental_ranked, start=1
+                )
+                if relevant
+            ),
+            None,
+        )
+
+        experimental_reciprocal_ranks.append(
+            1 / first_relevant_rank if first_relevant_rank else 0.0
+        )
+
         print(f"\nCase {index}: {case['query']}")
-        for rank, (score, text, relevant) in enumerate(ranked, start=1):
+
+        print("\nBaseline ranking (semantic only):")
+        for rank, (score, text, relevant) in enumerate(
+            ranked, start=1
+        ):
             label = "RELEVANT" if relevant else "NOT RELEVANT"
             print(f"{rank}. {score:.4f} [{label}] {text}")
 
-        print(f"Recall@{TOP_K}: {recall:.2f}")
-        print(f"Reciprocal rank: {reciprocal_rank:.2f}")
+        print("\nExperimental ranking (semantic + lexical):")
+        for rank, (score, text, relevant) in enumerate(
+            experimental_ranked, start=1
+        ):
+            label = "RELEVANT" if relevant else "NOT RELEVANT"
+            print(f"{rank}. {score:.4f} [{label}] {text}")
 
-    unique_queries = {
-        case["query"] for case in CASES
-    }
+        print(f"\nBaseline Recall@{TOP_K}: {recall_at_5:.2f}")
+        print(f"Baseline Recall@{EVAL_K}: {recall_at_3:.2f}")
+        print(f"Baseline reciprocal rank: {reciprocal_rank:.2f}")
 
-    print("\n=== Overall results ===")
+    unique_queries = {case["query"] for case in CASES}
+
+    print("\n=== Baseline results ===")
     print(f"Test cases: {len(CASES)}")
     print(f"Unique query texts: {len(unique_queries)}")
-    print(f"Mean Recall@{TOP_K}: {sum(recalls) / len(recalls):.3f}")
+    print(
+        f"Mean Recall@{TOP_K}: "
+        f"{sum(recalls_at_5) / len(recalls_at_5):.3f}"
+    )
+    print(
+        f"Mean Recall@{EVAL_K}: "
+        f"{sum(recalls_at_3) / len(recalls_at_3):.3f}"
+    )
     print(f"MRR: {sum(reciprocal_ranks) / len(reciprocal_ranks):.3f}")
+
+    print("\n=== Experimental results ===")
+    print(
+        f"Mean Recall@{TOP_K}: "
+        f"{sum(experimental_recalls_at_5) / len(experimental_recalls_at_5):.3f}"
+    )
+    print(
+        f"Mean Recall@{EVAL_K}: "
+        f"{sum(experimental_recalls_at_3) / len(experimental_recalls_at_3):.3f}"
+    )
+    print(
+        f"MRR: "
+        f"{sum(experimental_reciprocal_ranks) / len(experimental_reciprocal_ranks):.3f}"
+    )
 
 
 if __name__ == "__main__":
