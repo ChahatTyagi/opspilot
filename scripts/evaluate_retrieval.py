@@ -94,9 +94,13 @@ def lexical_overlap(query: str, text: str) -> float:
         return 0.0
 
     return len(query_terms & text_terms) / len(query_terms)
-
 def rerank_with_lexical_overlap(query, ranked, alpha=0.8):
-    """Experimentally combine semantic and lexical relevance."""
+    """Experimental reranker; lexical overlap did not improve benchmark metrics.
+
+    This is an evaluation-only experiment, not production retrieval logic.
+    The small, hand-labelled benchmark has repeated query text and does not
+    establish real-world retrieval performance.
+    """
     reranked = []
 
     for semantic_score, text, relevant in ranked:
