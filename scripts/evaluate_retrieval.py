@@ -114,6 +114,51 @@ CASES = [
             ("Database backups completed without errors.", False),
         ],
     },
+    {
+        "query": "Why are database queries slow despite low traffic?",
+        "candidates": [
+            ("Database queries are waiting on locks held by a long-running transaction.", True),
+            ("The query planner switched to a sequential scan after a statistics change.", True),
+            ("Database connection pool utilization is low and stable.", False),
+            ("The database dashboard theme was updated.", False),
+            ("The payment service returned HTTP 401 errors.", False),
+            ("A scheduled database backup completed successfully.", False),
+        ],
+    },
+    {
+        "query": "Why are background jobs being processed more slowly?",
+        "candidates": [
+            ("Queue depth is increasing while worker throughput has fallen.", True),
+            ("Workers are repeatedly retrying jobs after downstream requests time out.", True),
+            ("The admin dashboard shows a higher number of queued jobs due to a display change.", False),
+            ("Redis snapshots completed successfully.", False),
+            ("The login service is rejecting expired access tokens.", False),
+            ("The job documentation was revised.", False),
+        ],
+    },
+    {
+        "query": "Why is the service restarting repeatedly after deployment?",
+        "candidates": [
+            ("The new container exits because a required environment variable is missing.", True),
+            ("The process exceeds its memory limit and is repeatedly killed by the container runtime.", True),
+            ("The release notes contain a new section.", False),
+            ("The readiness probe succeeds consistently after startup.", False),
+            ("The reporting dashboard font was changed.", False),
+            ("Database backups completed without errors.", False),
+        ],
+    },
+    {
+        "query": "Why are checkout requests failing while the payment page loads?",
+        "candidates": [
+            ("The checkout API returns HTTP 500 when the payment provider request times out.", True),
+            ("Payment requests fail because the downstream provider rejects connections.", True),
+            ("The payment page CSS changed without affecting API requests.", False),
+            ("The reporting service has stable response times.", False),
+            ("The login page logo was resized.", False),
+            ("The checkout button animation is slow, but requests succeed.", False),
+        ],
+    },
+
 ]
 
 TOP_K = 5
@@ -131,7 +176,7 @@ def rerank_with_lexical_overlap(query, ranked, alpha=0.8):
     """Experimental reranker; lexical overlap did not improve benchmark metrics.
 
     This is an evaluation-only experiment, not production retrieval logic.
-    The small, hand-labelled benchmark has repeated query text and does not
+    The small, hand-labelled benchmark has distinct queries and does not
     establish real-world retrieval performance.
     """
     reranked = []
