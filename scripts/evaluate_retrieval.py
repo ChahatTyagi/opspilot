@@ -81,6 +81,39 @@ CASES = [
             ("The homepage image assets are missing.", False),
         ],
     },
+        {
+        "query": "Why are background jobs stuck in the queue?",
+        "candidates": [
+            ("Workers cannot acquire messages from the Redis queue.", True),
+            ("Queue depth has increased while worker throughput dropped.", True),
+            ("The admin dashboard layout changed.", False),
+            ("Redis snapshots completed successfully.", False),
+            ("The job documentation was updated.", False),
+            ("The payment service database pool is exhausted.", False),
+        ],
+    },
+    {
+        "query": "Why is memory usage growing continuously?",
+        "candidates": [
+            ("The service retains request objects after each response.", True),
+            ("Heap usage increases steadily without corresponding traffic growth.", True),
+            ("The monitoring dashboard uses a new font.", False),
+            ("A scheduled database backup completed.", False),
+            ("The service API documentation was revised.", False),
+            ("The login endpoint returned HTTP 401 errors.", False),
+        ],
+    },
+    {
+        "query": "Why are deployment health checks failing?",
+        "candidates": [
+            ("The new container fails readiness checks because its dependency is unavailable.", True),
+            ("Health probes time out before the application finishes starting.", True),
+            ("The release notes contain a new section.", False),
+            ("The deployment dashboard theme was changed.", False),
+            ("The background worker CPU usage is stable.", False),
+            ("Database backups completed without errors.", False),
+        ],
+    },
 ]
 
 TOP_K = 5
