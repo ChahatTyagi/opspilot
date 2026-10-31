@@ -1,5 +1,6 @@
 
 import pytest
+from scripts.evaluate_retrieval import validate_case
 from scripts.evaluate_retrieval import mean_metric
 from scripts.evaluate_retrieval import (
     evaluate_case,
@@ -146,3 +147,52 @@ def test_mean_metric_returns_case_weighted_mean():
 
 def test_mean_metric_returns_zero_for_empty_values():
     assert mean_metric([]) == 0.0
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        {"query": "", "candidates": []},
+        {"query": "   ", "candidates": []},
+        {"query": "valid query"},
+        {"query": "valid query", "candidates": "not a list"},
+    ],
+)
+def test_validate_case_rejects_invalid_case_structure(case):
+    with pytest.raises(ValueError):
+        validate_case(case)
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        ("", True),
+        ("   ", False),
+        ("valid text", "yes"),
+        ("valid text", 1),
+        ("valid text", True, "extra"),
+        "not a tuple",
+    ],
+)
+def test_validate_case_rejects_invalid_candidates(candidate):
+    case = {
+        "query": "valid query",
+        "candidates": [candidate],
+    }
+
+    with pytest.raises(ValueError):
+        validate_case(case)
+
+
+def test_validate_case_accepts_valid_case_and_empty_candidates():
+    validate_case({
+        "query": "valid query",
+        "candidates": [
+            ("relevant evidence", True),
+            ("irrelevant evidence", False),
+        ],
+    })
+
+    validate_case({
+        "query": "valid query",
+        "candidates": [],
+    })

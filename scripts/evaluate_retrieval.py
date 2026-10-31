@@ -197,7 +197,41 @@ def rerank_with_lexical_overlap(query, ranked, alpha=0.8):
         key=lambda item: item[0],
         reverse=True,
     )
+def validate_case(case):
+    if not isinstance(case, dict):
+        raise ValueError("Evaluation case must be a dictionary")
+
+    query = case.get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("Evaluation case query must be a non-empty string")
+
+    candidates = case.get("candidates")
+    if not isinstance(candidates, list):
+        raise ValueError("Evaluation case candidates must be a list")
+
+    for index, candidate in enumerate(candidates):
+        if (
+            not isinstance(candidate, tuple)
+            or len(candidate) != 2
+        ):
+            raise ValueError(
+                f"Candidate {index} must be a (text, relevant) tuple"
+            )
+
+        text, relevant = candidate
+
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError(
+                f"Candidate {index} text must be a non-empty string"
+            )
+
+        if not isinstance(relevant, bool):
+            raise ValueError(
+                f"Candidate {index} relevance label must be a boolean"
+            )
 def evaluate_case(embedder, case):
+    validate_case(case)
+
     candidates = case["candidates"]
     texts = [text for text, _ in candidates]
     vectors = embedder.embed_texts([case["query"]] + texts)
