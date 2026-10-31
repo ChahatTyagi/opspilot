@@ -209,6 +209,38 @@ def validate_case(case):
     if not isinstance(candidates, list):
         raise ValueError("Evaluation case candidates must be a list")
 
+    seen_texts = set()
+
+    for index, candidate in enumerate(candidates):
+        if (
+            not isinstance(candidate, tuple)
+            or len(candidate) != 2
+        ):
+            raise ValueError(
+                f"Candidate {index} must be a (text, relevant) tuple"
+            )
+
+        text, relevant = candidate
+
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError(
+                f"Candidate {index} text must be a non-empty string"
+            )
+
+        if not isinstance(relevant, bool):
+            raise ValueError(
+                f"Candidate {index} relevance label must be a boolean"
+            )
+
+        normalized_text = " ".join(text.lower().split())
+
+        if normalized_text in seen_texts:
+            raise ValueError(
+                f"Candidate {index} duplicates earlier candidate text"
+            )
+
+        seen_texts.add(normalized_text)
+
     for index, candidate in enumerate(candidates):
         if (
             not isinstance(candidate, tuple)

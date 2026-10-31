@@ -196,3 +196,35 @@ def test_validate_case_accepts_valid_case_and_empty_candidates():
         "query": "valid query",
         "candidates": [],
     })
+
+@pytest.mark.parametrize(
+    "candidates",
+    [
+        [
+            ("Database timeout", True),
+            ("Database timeout", False),
+        ],
+        [
+            ("Database timeout", True),
+            (" database   timeout ", False),
+        ],
+    ],
+)
+def test_validate_case_rejects_duplicate_candidate_text(candidates):
+    with pytest.raises(ValueError, match="duplicates earlier candidate"):
+        validate_case({
+            "query": "database issue",
+            "candidates": candidates,
+        })
+
+
+def test_validate_case_allows_same_text_in_different_cases():
+    validate_case({
+        "query": "database issue",
+        "candidates": [("Database timeout", True)],
+    })
+
+    validate_case({
+        "query": "authentication issue",
+        "candidates": [("Database timeout", False)],
+    })
