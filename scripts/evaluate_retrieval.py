@@ -257,7 +257,9 @@ def evaluate_case(embedder, case):
 
     return ranked, recall_at_5, recall_at_3, reciprocal_rank
 
-
+def mean_metric(values):
+    """Return the case-weighted mean of evaluation metrics."""
+    return sum(values) / len(values) if values else 0.0
 def main():
     embedder = LocalEmbedder()
 
@@ -337,33 +339,32 @@ def main():
         print(f"Baseline Recall@{EVAL_K}: {recall_at_3:.2f}")
         print(f"Baseline reciprocal rank: {reciprocal_rank:.2f}")
 
-    unique_queries = {case["query"] for case in CASES}
+        unique_queries = {case["query"] for case in CASES}
 
     print("\n=== Baseline results ===")
     print(f"Test cases: {len(CASES)}")
     print(f"Unique query texts: {len(unique_queries)}")
     print(
         f"Mean Recall@{TOP_K}: "
-        f"{sum(recalls_at_5) / len(recalls_at_5):.3f}"
+        f"{mean_metric(recalls_at_5):.3f}"
     )
     print(
         f"Mean Recall@{EVAL_K}: "
-        f"{sum(recalls_at_3) / len(recalls_at_3):.3f}"
+        f"{mean_metric(recalls_at_3):.3f}"
     )
-    print(f"MRR: {sum(reciprocal_ranks) / len(reciprocal_ranks):.3f}")
+    print(f"MRR: {mean_metric(reciprocal_ranks):.3f}")
 
     print("\n=== Experimental results ===")
     print(
         f"Mean Recall@{TOP_K}: "
-        f"{sum(experimental_recalls_at_5) / len(experimental_recalls_at_5):.3f}"
+        f"{mean_metric(experimental_recalls_at_5):.3f}"
     )
     print(
         f"Mean Recall@{EVAL_K}: "
-        f"{sum(experimental_recalls_at_3) / len(experimental_recalls_at_3):.3f}"
+        f"{mean_metric(experimental_recalls_at_3):.3f}"
     )
     print(
-        f"MRR: "
-        f"{sum(experimental_reciprocal_ranks) / len(experimental_reciprocal_ranks):.3f}"
+        f"MRR: {mean_metric(experimental_reciprocal_ranks):.3f}"
     )
 
 

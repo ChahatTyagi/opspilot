@@ -1,6 +1,6 @@
 
 import pytest
-
+from scripts.evaluate_retrieval import mean_metric
 from scripts.evaluate_retrieval import (
     evaluate_case,
     lexical_overlap,
@@ -139,3 +139,10 @@ def test_evaluate_case_handles_k_larger_than_candidate_count():
     assert recall_at_5 == pytest.approx(1.0)
     assert recall_at_3 == pytest.approx(1.0)
     assert reciprocal_rank == pytest.approx(1.0)
+
+def test_mean_metric_returns_case_weighted_mean():
+    assert mean_metric([0.5, 1.0]) == 0.75
+
+
+def test_mean_metric_returns_zero_for_empty_values():
+    assert mean_metric([]) == 0.0
