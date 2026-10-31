@@ -95,3 +95,47 @@ def test_evaluate_case_handles_no_relevant_candidates():
     assert recall_at_5 == 0.0
     assert recall_at_3 == 0.0
     assert reciprocal_rank == 0.0
+
+def test_evaluate_case_handles_empty_candidates():
+    case = {
+        "query": "payment failure",
+        "candidates": [],
+    }
+
+    embedder = FakeEmbedder([[1.0, 0.0]])
+
+    ranked, recall_at_5, recall_at_3, reciprocal_rank = evaluate_case(
+        embedder,
+        case,
+    )
+
+    assert ranked == []
+    assert recall_at_5 == 0.0
+    assert recall_at_3 == 0.0
+    assert reciprocal_rank == 0.0
+
+
+def test_evaluate_case_handles_k_larger_than_candidate_count():
+    case = {
+        "query": "payment failure",
+        "candidates": [
+            ("payment service failure", True),
+            ("unrelated frontend styling", False),
+        ],
+    }
+
+    embedder = FakeEmbedder([
+        [1.0, 0.0],
+        [0.99, 0.01],
+        [0.0, 1.0],
+    ])
+
+    ranked, recall_at_5, recall_at_3, reciprocal_rank = evaluate_case(
+        embedder,
+        case,
+    )
+
+    assert len(ranked) == 2
+    assert recall_at_5 == pytest.approx(1.0)
+    assert recall_at_3 == pytest.approx(1.0)
+    assert reciprocal_rank == pytest.approx(1.0)
