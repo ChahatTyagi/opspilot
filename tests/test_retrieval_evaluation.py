@@ -2,6 +2,7 @@ import pytest
 import scripts.evaluate_retrieval as retrieval_evaluation
 from scripts.evaluate_retrieval import validate_case, validate_cases
 from scripts.evaluate_retrieval import mean_metric
+from scripts.evaluate_retrieval import reciprocal_rank
 from scripts.evaluate_retrieval import (
     evaluate_case,
     lexical_overlap,
@@ -299,3 +300,21 @@ def test_main_validates_cases_before_loading_embedder(monkeypatch):
         match="Evaluation case query must be a non-empty string",
     ):
         retrieval_evaluation.main()
+@pytest.mark.parametrize(
+    ("ranked", "expected"),
+    [
+        ([(0.9, "relevant evidence", True)], 1.0),
+        (
+            [
+                (0.9, "irrelevant one", False),
+                (0.8, "irrelevant two", False),
+                (0.7, "relevant evidence", True),
+            ],
+            1 / 3,
+        ),
+        ([(0.9, "irrelevant evidence", False)], 0.0),
+        ([], 0.0),
+    ],
+)
+def test_reciprocal_rank_returns_expected_score(ranked, expected):
+    assert reciprocal_rank(ranked) == pytest.approx(expected)

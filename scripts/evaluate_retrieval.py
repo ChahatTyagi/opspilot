@@ -1,4 +1,5 @@
 import re
+
 from app.embeddings import LocalEmbedder
 from app.retrieval import cosine_similarity
 
@@ -81,7 +82,7 @@ CASES = [
             ("The homepage image assets are missing.", False),
         ],
     },
-        {
+    {
         "query": "Why are background jobs stuck in the queue?",
         "candidates": [
             ("Workers cannot acquire messages from the Redis queue.", True),
@@ -106,8 +107,14 @@ CASES = [
     {
         "query": "Why are deployment health checks failing?",
         "candidates": [
-            ("The new container fails readiness checks because its dependency is unavailable.", True),
-            ("Health probes time out before the application finishes starting.", True),
+            (
+                "The new container fails readiness checks because its dependency is unavailable.",
+                True,
+            ),
+            (
+                "Health probes time out before the application finishes starting.",
+                True,
+            ),
             ("The release notes contain a new section.", False),
             ("The deployment dashboard theme was changed.", False),
             ("The background worker CPU usage is stable.", False),
@@ -117,8 +124,14 @@ CASES = [
     {
         "query": "Why are database queries slow despite low traffic?",
         "candidates": [
-            ("Database queries are waiting on locks held by a long-running transaction.", True),
-            ("The query planner switched to a sequential scan after a statistics change.", True),
+            (
+                "Database queries are waiting on locks held by a long-running transaction.",
+                True,
+            ),
+            (
+                "The query planner switched to a sequential scan after a statistics change.",
+                True,
+            ),
             ("Database connection pool utilization is low and stable.", False),
             ("The database dashboard theme was updated.", False),
             ("The payment service returned HTTP 401 errors.", False),
@@ -129,8 +142,14 @@ CASES = [
         "query": "Why are background jobs being processed more slowly?",
         "candidates": [
             ("Queue depth is increasing while worker throughput has fallen.", True),
-            ("Workers are repeatedly retrying jobs after downstream requests time out.", True),
-            ("The admin dashboard shows a higher number of queued jobs due to a display change.", False),
+            (
+                "Workers are repeatedly retrying jobs after downstream requests time out.",
+                True,
+            ),
+            (
+                "The admin dashboard shows a higher number of queued jobs due to a display change.",
+                False,
+            ),
             ("Redis snapshots completed successfully.", False),
             ("The login service is rejecting expired access tokens.", False),
             ("The job documentation was revised.", False),
@@ -139,8 +158,14 @@ CASES = [
     {
         "query": "Why is the service restarting repeatedly after deployment?",
         "candidates": [
-            ("The new container exits because a required environment variable is missing.", True),
-            ("The process exceeds its memory limit and is repeatedly killed by the container runtime.", True),
+            (
+                "The new container exits because a required environment variable is missing.",
+                True,
+            ),
+            (
+                "The process exceeds its memory limit and is repeatedly killed by the container runtime.",
+                True,
+            ),
             ("The release notes contain a new section.", False),
             ("The readiness probe succeeds consistently after startup.", False),
             ("The reporting dashboard font was changed.", False),
@@ -150,19 +175,26 @@ CASES = [
     {
         "query": "Why are checkout requests failing while the payment page loads?",
         "candidates": [
-            ("The checkout API returns HTTP 500 when the payment provider request times out.", True),
-            ("Payment requests fail because the downstream provider rejects connections.", True),
+            (
+                "The checkout API returns HTTP 500 when the payment provider request times out.",
+                True,
+            ),
+            (
+                "Payment requests fail because the downstream provider rejects connections.",
+                True,
+            ),
             ("The payment page CSS changed without affecting API requests.", False),
             ("The reporting service has stable response times.", False),
             ("The login page logo was resized.", False),
             ("The checkout button animation is slow, but requests succeed.", False),
         ],
     },
-
 ]
 
 TOP_K = 5
 EVAL_K = 3
+
+
 def lexical_overlap(query: str, text: str) -> float:
     """Measure the proportion of query terms present in the text."""
     query_terms = set(re.findall(r"\b[a-z0-9]+\b", query.lower()))
@@ -172,6 +204,8 @@ def lexical_overlap(query: str, text: str) -> float:
         return 0.0
 
     return len(query_terms & text_terms) / len(query_terms)
+
+
 def rerank_with_lexical_overlap(query, ranked, alpha=0.8):
     """Experimental reranker; lexical overlap did not improve benchmark metrics.
 
@@ -188,15 +222,15 @@ def rerank_with_lexical_overlap(query, ranked, alpha=0.8):
             + (1 - alpha) * lexical_score
         )
 
-        reranked.append(
-            (combined_score, text, relevant)
-        )
+        reranked.append((combined_score, text, relevant))
 
     return sorted(
         reranked,
         key=lambda item: item[0],
         reverse=True,
     )
+
+
 def validate_case(case):
     if not isinstance(case, dict):
         raise ValueError("Evaluation case must be a dictionary")
@@ -212,10 +246,7 @@ def validate_case(case):
     seen_texts = set()
 
     for index, candidate in enumerate(candidates):
-        if (
-            not isinstance(candidate, tuple)
-            or len(candidate) != 2
-        ):
+        if not isinstance(candidate, tuple) or len(candidate) != 2:
             raise ValueError(
                 f"Candidate {index} must be a (text, relevant) tuple"
             )
@@ -241,32 +272,29 @@ def validate_case(case):
 
         seen_texts.add(normalized_text)
 
-    for index, candidate in enumerate(candidates):
-        if (
-            not isinstance(candidate, tuple)
-            or len(candidate) != 2
-        ):
-            raise ValueError(
-                f"Candidate {index} must be a (text, relevant) tuple"
-            )
 
-        text, relevant = candidate
-
-        if not isinstance(text, str) or not text.strip():
-            raise ValueError(
-                f"Candidate {index} text must be a non-empty string"
-            )
-
-        if not isinstance(relevant, bool):
-            raise ValueError(
-                f"Candidate {index} relevance label must be a boolean"
-            )
 def validate_cases(cases):
     if not isinstance(cases, list):
         raise ValueError("Evaluation cases must be a list")
 
     for case in cases:
         validate_case(case)
+
+
+def reciprocal_rank(ranked):
+    """Return the reciprocal rank of the first relevant result."""
+    first_relevant_rank = next(
+        (
+            rank
+            for rank, (_, _, relevant) in enumerate(ranked, start=1)
+            if relevant
+        ),
+        None,
+    )
+
+    return 1 / first_relevant_rank if first_relevant_rank else 0.0
+
+
 def evaluate_case(embedder, case):
     validate_case(case)
 
@@ -312,26 +340,16 @@ def evaluate_case(embedder, case):
         else 0.0
     )
 
-    first_relevant_rank = next(
-        (
-            rank
-            for rank, (_, _, relevant) in enumerate(ranked, start=1)
-            if relevant
-        ),
-        None,
-    )
+    reciprocal_rank_score = reciprocal_rank(ranked)
 
-    reciprocal_rank = (
-        1 / first_relevant_rank
-        if first_relevant_rank
-        else 0.0
-    )
+    return ranked, recall_at_5, recall_at_3, reciprocal_rank_score
 
-    return ranked, recall_at_5, recall_at_3, reciprocal_rank
 
 def mean_metric(values):
     """Return the case-weighted mean of evaluation metrics."""
     return sum(values) / len(values) if values else 0.0
+
+
 def main():
     validate_cases(CASES)
     embedder = LocalEmbedder()
@@ -339,24 +357,28 @@ def main():
     recalls_at_5 = []
     recalls_at_3 = []
     reciprocal_ranks = []
+
     experimental_recalls_at_5 = []
     experimental_recalls_at_3 = []
     experimental_reciprocal_ranks = []
+
+    unique_queries = {case["query"] for case in CASES}
 
     for index, case in enumerate(CASES, start=1):
         (
             ranked,
             recall_at_5,
             recall_at_3,
-            reciprocal_rank,
+            reciprocal_rank_score,
         ) = evaluate_case(embedder, case)
 
         recalls_at_5.append(recall_at_5)
         recalls_at_3.append(recall_at_3)
-        reciprocal_ranks.append(reciprocal_rank)
+        reciprocal_ranks.append(reciprocal_rank_score)
 
         experimental_ranked = rerank_with_lexical_overlap(
-            case["query"], ranked
+            case["query"],
+            ranked,
         )
 
         relevant_total = sum(
@@ -377,19 +399,8 @@ def main():
             ) / relevant_total if relevant_total else 0.0
         )
 
-        first_relevant_rank = next(
-            (
-                rank
-                for rank, (_, _, relevant) in enumerate(
-                    experimental_ranked, start=1
-                )
-                if relevant
-            ),
-            None,
-        )
-
         experimental_reciprocal_ranks.append(
-            1 / first_relevant_rank if first_relevant_rank else 0.0
+            reciprocal_rank(experimental_ranked)
         )
 
         print(f"\nCase {index}: {case['query']}")
@@ -410,9 +421,7 @@ def main():
 
         print(f"\nBaseline Recall@{TOP_K}: {recall_at_5:.2f}")
         print(f"Baseline Recall@{EVAL_K}: {recall_at_3:.2f}")
-        print(f"Baseline reciprocal rank: {reciprocal_rank:.2f}")
-
-        unique_queries = {case["query"] for case in CASES}
+        print(f"Baseline reciprocal rank: {reciprocal_rank_score:.2f}")
 
     print("\n=== Baseline results ===")
     print(f"Test cases: {len(CASES)}")
