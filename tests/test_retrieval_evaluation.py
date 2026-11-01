@@ -318,3 +318,55 @@ def test_main_validates_cases_before_loading_embedder(monkeypatch):
 )
 def test_reciprocal_rank_returns_expected_score(ranked, expected):
     assert reciprocal_rank(ranked) == pytest.approx(expected)
+
+def test_main_reports_baseline_and_experimental_mrr(monkeypatch, capsys):
+    cases = [
+        {
+            "query": "payment failure",
+            "candidates": [
+                ("relevant evidence", True),
+                ("irrelevant evidence", False),
+            ],
+        }
+    ]
+
+    baseline_ranked = [
+        (0.9, "irrelevant evidence", False),
+        (0.8, "relevant evidence", True),
+    ]
+
+    experimental_ranked = [
+        (0.9, "relevant evidence", True),
+        (0.8, "irrelevant evidence", False),
+    ]
+
+    monkeypatch.setattr(retrieval_evaluation, "CASES", cases)
+    monkeypatch.setattr(
+        retrieval_evaluation,
+        "LocalEmbedder",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        retrieval_evaluation,
+        "evaluate_case",
+        lambda embedder, case: (
+            baseline_ranked,
+            1.0,
+            1.0,
+            0.5,
+        ),
+    )
+    monkeypatch.setattr(
+        retrieval_evaluation,
+        "rerank_with_lexical_overlap",
+        lambda query, ranked: experimental_ranked,
+    )
+
+    retrieval_evaluation.main()
+
+    output = capsys.readouterr().out
+
+    assert "=== Baseline results ===" in output
+    assert "=== Experimental results ===" in output
+    assert "MRR: 0.500" in output
+    assert output.count("MRR: 1.000") == 1
