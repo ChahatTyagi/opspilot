@@ -349,7 +349,9 @@ def mean_metric(values):
     """Return the case-weighted mean of evaluation metrics."""
     return sum(values) / len(values) if values else 0.0
 
-
+def metric_delta(baseline, experimental):
+    """Return experimental metric minus baseline metric."""
+    return experimental - baseline
 def main():
     validate_cases(CASES)
     embedder = LocalEmbedder()
@@ -422,9 +424,8 @@ def main():
         print(f"\nBaseline Recall@{TOP_K}: {recall_at_5:.2f}")
         print(f"Baseline Recall@{EVAL_K}: {recall_at_3:.2f}")
         print(f"Baseline reciprocal rank: {reciprocal_rank_score:.2f}")
-
-    print("\n=== Baseline results ===")
-    print(f"Test cases: {len(CASES)}")
+        print("\n=== Baseline results ===")
+        print(f"Test cases: {len(CASES)}")
     print(f"Unique query texts: {len(unique_queries)}")
     print(
         f"Mean Recall@{TOP_K}: "
@@ -448,7 +449,27 @@ def main():
     print(
         f"MRR: {mean_metric(experimental_reciprocal_ranks):.3f}"
     )
-
-
+    print("\n=== Experimental change ===")
+    print(
+        f"Recall@{TOP_K} delta: "
+        f"{metric_delta(
+            mean_metric(recalls_at_5),
+            mean_metric(experimental_recalls_at_5),
+        ):+.3f}"
+    )
+    print(
+        f"Recall@{EVAL_K} delta: "
+        f"{metric_delta(
+            mean_metric(recalls_at_3),
+            mean_metric(experimental_recalls_at_3),
+        ):+.3f}"
+    )
+    print(
+        f"MRR delta: "
+        f"{metric_delta(
+            mean_metric(reciprocal_ranks),
+            mean_metric(experimental_reciprocal_ranks),
+        ):+.3f}"
+    )
 if __name__ == "__main__":
     main()

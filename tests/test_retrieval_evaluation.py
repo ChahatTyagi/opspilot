@@ -370,3 +370,21 @@ def test_main_reports_baseline_and_experimental_mrr(monkeypatch, capsys):
     assert "=== Experimental results ===" in output
     assert "MRR: 0.500" in output
     assert output.count("MRR: 1.000") == 1
+
+@pytest.mark.parametrize(
+    ("baseline", "experimental", "expected"),
+    [
+        (0.5, 0.75, 0.25),
+        (0.75, 0.5, -0.25),
+        (0.5, 0.5, 0.0),
+    ],
+)
+def test_metric_delta_returns_experimental_minus_baseline(
+    baseline,
+    experimental,
+    expected,
+):
+    assert retrieval_evaluation.metric_delta(
+        baseline,
+        experimental,
+    ) == pytest.approx(expected)
