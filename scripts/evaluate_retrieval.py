@@ -261,6 +261,12 @@ def validate_case(case):
             raise ValueError(
                 f"Candidate {index} relevance label must be a boolean"
             )
+def validate_cases(cases):
+    if not isinstance(cases, list):
+        raise ValueError("Evaluation cases must be a list")
+
+    for case in cases:
+        validate_case(case)
 def evaluate_case(embedder, case):
     validate_case(case)
 
@@ -327,6 +333,7 @@ def mean_metric(values):
     """Return the case-weighted mean of evaluation metrics."""
     return sum(values) / len(values) if values else 0.0
 def main():
+    validate_cases(CASES)
     embedder = LocalEmbedder()
 
     recalls_at_5 = []

@@ -1,13 +1,12 @@
-
 import pytest
-from scripts.evaluate_retrieval import validate_case
+
+from scripts.evaluate_retrieval import validate_case, validate_cases
 from scripts.evaluate_retrieval import mean_metric
 from scripts.evaluate_retrieval import (
     evaluate_case,
     lexical_overlap,
     rerank_with_lexical_overlap,
 )
-
 
 class FakeEmbedder:
     def __init__(self, vectors):
@@ -228,3 +227,49 @@ def test_validate_case_allows_same_text_in_different_cases():
         "query": "authentication issue",
         "candidates": [("Database timeout", False)],
     })
+
+def test_validate_cases_accepts_valid_dataset():
+    cases = [
+        {
+            "query": "payment service failure",
+            "candidates": [
+                ("Payment service is failing", True),
+                ("Database connection healthy", False),
+            ],
+        },
+        {
+            "query": "database timeout",
+            "candidates": [
+                ("Database request timed out", True),
+            ],
+        },
+    ]
+
+    validate_cases(cases)
+
+
+def test_validate_cases_rejects_invalid_later_case():
+    cases = [
+        {
+            "query": "valid query",
+            "candidates": [("relevant evidence", True)],
+        },
+        {
+            "query": "",
+            "candidates": [("evidence", True)],
+        },
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match="Evaluation case query must be a non-empty string",
+    ):
+        validate_cases(cases)
+
+
+def test_validate_cases_rejects_non_list_dataset():
+    with pytest.raises(
+        ValueError,
+        match="Evaluation cases must be a list",
+    ):
+        validate_cases(None)
