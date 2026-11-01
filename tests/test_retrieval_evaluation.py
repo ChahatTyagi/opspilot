@@ -1,5 +1,5 @@
 import pytest
-
+import scripts.evaluate_retrieval as retrieval_evaluation
 from scripts.evaluate_retrieval import validate_case, validate_cases
 from scripts.evaluate_retrieval import mean_metric
 from scripts.evaluate_retrieval import (
@@ -273,3 +273,29 @@ def test_validate_cases_rejects_non_list_dataset():
         match="Evaluation cases must be a list",
     ):
         validate_cases(None)
+def test_main_validates_cases_before_loading_embedder(monkeypatch):
+    monkeypatch.setattr(
+        retrieval_evaluation,
+        "CASES",
+        [
+            {
+                "query": "",
+                "candidates": [("evidence", True)],
+            }
+        ],
+    )
+
+    def fail_if_embedder_loads():
+        pytest.fail("Embedder should not load before dataset validation")
+
+    monkeypatch.setattr(
+        retrieval_evaluation,
+        "LocalEmbedder",
+        fail_if_embedder_loads,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Evaluation case query must be a non-empty string",
+    ):
+        retrieval_evaluation.main()
