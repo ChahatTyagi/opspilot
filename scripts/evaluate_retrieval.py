@@ -486,26 +486,42 @@ def main():
         f"{mean_metric(experimental_recalls_at_3):.3f}"
     )
     print(f"MRR: {mean_metric(experimental_reciprocal_ranks):.3f}")
-
     print("\n=== Experimental change ===")
 
+    baseline_recall_at_5 = mean_metric(recalls_at_5)
+    experimental_recall_at_5 = mean_metric(experimental_recalls_at_5)
+
+    baseline_recall_at_3 = mean_metric(recalls_at_3)
+    experimental_recall_at_3 = mean_metric(experimental_recalls_at_3)
+
+    baseline_mrr = mean_metric(reciprocal_ranks)
+    experimental_mrr = mean_metric(experimental_reciprocal_ranks)
+
     recall_at_5_delta = metric_delta(
-        mean_metric(recalls_at_5),
-        mean_metric(experimental_recalls_at_5),
+        baseline_recall_at_5,
+        experimental_recall_at_5,
     )
     recall_at_3_delta = metric_delta(
-        mean_metric(recalls_at_3),
-        mean_metric(experimental_recalls_at_3),
+        baseline_recall_at_3,
+        experimental_recall_at_3,
     )
     mrr_delta = metric_delta(
-        mean_metric(reciprocal_ranks),
-        mean_metric(experimental_reciprocal_ranks),
+        baseline_mrr,
+        experimental_mrr,
     )
 
-    print(f"Recall@{TOP_K} delta: {recall_at_5_delta:+.3f}")
-    print(f"Recall@{EVAL_K} delta: {recall_at_3_delta:+.3f}")
-    print(f"MRR delta: {mrr_delta:+.3f}")
-
+    print(
+        f"Recall@{TOP_K}: {baseline_recall_at_5:.3f} -> "
+        f"{experimental_recall_at_5:.3f} ({recall_at_5_delta:+.3f})"
+    )
+    print(
+        f"Recall@{EVAL_K}: {baseline_recall_at_3:.3f} -> "
+        f"{experimental_recall_at_3:.3f} ({recall_at_3_delta:+.3f})"
+    )
+    print(
+        f"MRR: {baseline_mrr:.3f} -> "
+        f"{experimental_mrr:.3f} ({mrr_delta:+.3f})"
+    )
     deltas = {
         "recall_at_5": recall_at_5_delta,
         "recall_at_3": recall_at_3_delta,
@@ -513,7 +529,6 @@ def main():
     }
     outcome = classify_outcome(deltas)
     print(f"Overall outcome: {outcome}")
-
 
 if __name__ == "__main__":
     main()

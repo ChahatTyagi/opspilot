@@ -419,6 +419,10 @@ def test_main_reports_baseline_and_experimental_mrr(monkeypatch, capsys):
     assert "=== Experimental results ===" in output
     assert "MRR: 0.500" in output
     assert output.count("MRR: 1.000") == 1
+    assert "Recall@5: 1.000 -> 1.000 (+0.000)" in output
+    assert "Recall@3: 1.000 -> 1.000 (+0.000)" in output
+    assert "MRR: 0.500 -> 1.000 (+0.500)" in output
+    assert "Overall outcome: improved" in output
 
 
 # ---------------------------------------------------------
