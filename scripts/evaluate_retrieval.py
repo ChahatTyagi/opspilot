@@ -322,6 +322,18 @@ def metric_delta(baseline, experimental):
     """Return experimental metric minus baseline metric."""
     return experimental - baseline
 
+def classify_outcome(deltas):
+    """Classify metric changes as improved, regressed, mixed, or unchanged."""
+    has_improvement = any(delta > 0 for delta in deltas.values())
+    has_regression = any(delta < 0 for delta in deltas.values())
+
+    if has_improvement and has_regression:
+        return "mixed"
+    if has_improvement:
+        return "improved"
+    if has_regression:
+        return "regressed"
+    return "unchanged"
 def compare_rankings(baseline_ranked, experimental_ranked):
     """Compare two rankings using Recall@5, Recall@3, and MRR."""
 
@@ -369,18 +381,7 @@ def compare_rankings(baseline_ranked, experimental_ranked):
         for metric in baseline_metrics
     }
 
-    has_improvement = any(delta > 0 for delta in deltas.values())
-    has_regression = any(delta < 0 for delta in deltas.values())
-
-    if has_improvement and has_regression:
-        outcome = "mixed"
-    elif has_improvement:
-        outcome = "improved"
-    elif has_regression:
-        outcome = "regressed"
-    else:
-        outcome = "unchanged"
-
+    outcome = classify_outcome(deltas)
     return {
         "baseline": baseline_metrics,
         "experimental": experimental_metrics,
@@ -510,19 +511,7 @@ def main():
         "recall_at_3": recall_at_3_delta,
         "mrr": mrr_delta,
     }
-
-    has_improvement = any(delta > 0 for delta in deltas.values())
-    has_regression = any(delta < 0 for delta in deltas.values())
-
-    if has_improvement and has_regression:
-        outcome = "mixed"
-    elif has_improvement:
-        outcome = "improved"
-    elif has_regression:
-        outcome = "regressed"
-    else:
-        outcome = "unchanged"
-
+    outcome = classify_outcome(deltas)
     print(f"Overall outcome: {outcome}")
 
 
