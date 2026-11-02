@@ -207,28 +207,15 @@ def lexical_overlap(query: str, text: str) -> float:
 
 
 def rerank_with_lexical_overlap(query, ranked, alpha=0.8):
-    """Experimental reranker; lexical overlap did not improve benchmark metrics.
-
-    This is an evaluation-only experiment, not production retrieval logic.
-    The small, hand-labelled benchmark has distinct queries and does not
-    establish real-world retrieval performance.
-    """
+    """Evaluation-only reranker; benchmark results are not production evidence."""
     reranked = []
 
     for semantic_score, text, relevant in ranked:
         lexical_score = lexical_overlap(query, text)
-        combined_score = (
-            alpha * semantic_score
-            + (1 - alpha) * lexical_score
-        )
-
+        combined_score = alpha * semantic_score + (1 - alpha) * lexical_score
         reranked.append((combined_score, text, relevant))
 
-    return sorted(
-        reranked,
-        key=lambda item: item[0],
-        reverse=True,
-    )
+    return sorted(reranked, key=lambda item: item[0], reverse=True)
 
 
 def validate_case(case):
@@ -304,42 +291,23 @@ def evaluate_case(embedder, case):
 
     ranked = sorted(
         [
-            (
-                cosine_similarity(vectors[0], vector),
-                text,
-                relevant,
-            )
-            for (text, relevant), vector
-            in zip(candidates, vectors[1:])
+            (cosine_similarity(vectors[0], vector), text, relevant)
+            for (text, relevant), vector in zip(candidates, vectors[1:])
         ],
         key=lambda item: item[0],
         reverse=True,
     )
 
-    relevant_total = sum(
-        relevant for _, _, relevant in ranked
-    )
-
-    relevant_top_k = sum(
-        relevant for _, _, relevant in ranked[:TOP_K]
-    )
-
-    relevant_top_3 = sum(
-        relevant for _, _, relevant in ranked[:EVAL_K]
-    )
+    relevant_total = sum(relevant for _, _, relevant in ranked)
+    relevant_top_k = sum(relevant for _, _, relevant in ranked[:TOP_K])
+    relevant_top_3 = sum(relevant for _, _, relevant in ranked[:EVAL_K])
 
     recall_at_5 = (
-        relevant_top_k / relevant_total
-        if relevant_total
-        else 0.0
+        relevant_top_k / relevant_total if relevant_total else 0.0
     )
-
     recall_at_3 = (
-        relevant_top_3 / relevant_total
-        if relevant_total
-        else 0.0
+        relevant_top_3 / relevant_total if relevant_total else 0.0
     )
-
     reciprocal_rank_score = reciprocal_rank(ranked)
 
     return ranked, recall_at_5, recall_at_3, reciprocal_rank_score
@@ -349,9 +317,77 @@ def mean_metric(values):
     """Return the case-weighted mean of evaluation metrics."""
     return sum(values) / len(values) if values else 0.0
 
+
 def metric_delta(baseline, experimental):
     """Return experimental metric minus baseline metric."""
     return experimental - baseline
+
+def compare_rankings(baseline_ranked, experimental_ranked):
+    """Compare two rankings using Recall@5, Recall@3, and MRR."""
+
+    def calculate_metrics(ranked):
+        relevant_total = sum(
+            1 for _, _, relevant in ranked if relevant
+        )
+
+        relevant_at_5 = sum(
+            1 for _, _, relevant in ranked[:TOP_K] if relevant
+        )
+
+        relevant_at_3 = sum(
+            1 for _, _, relevant in ranked[:EVAL_K] if relevant
+        )
+
+        recall_at_5 = (
+            relevant_at_5 / relevant_total
+            if relevant_total
+            else 0.0
+        )
+
+        recall_at_3 = (
+            relevant_at_3 / relevant_total
+            if relevant_total
+            else 0.0
+        )
+
+        mrr = reciprocal_rank(ranked)
+
+        return {
+            "recall_at_5": recall_at_5,
+            "recall_at_3": recall_at_3,
+            "mrr": mrr,
+        }
+
+    baseline_metrics = calculate_metrics(baseline_ranked)
+    experimental_metrics = calculate_metrics(experimental_ranked)
+
+    deltas = {
+        metric: metric_delta(
+            baseline_metrics[metric],
+            experimental_metrics[metric],
+        )
+        for metric in baseline_metrics
+    }
+
+    has_improvement = any(delta > 0 for delta in deltas.values())
+    has_regression = any(delta < 0 for delta in deltas.values())
+
+    if has_improvement and has_regression:
+        outcome = "mixed"
+    elif has_improvement:
+        outcome = "improved"
+    elif has_regression:
+        outcome = "regressed"
+    else:
+        outcome = "unchanged"
+
+    return {
+        "baseline": baseline_metrics,
+        "experimental": experimental_metrics,
+        "deltas": deltas,
+        "outcome": outcome,
+    }
+
 def main():
     validate_cases(CASES)
     embedder = LocalEmbedder()
@@ -379,8 +415,7 @@ def main():
         reciprocal_ranks.append(reciprocal_rank_score)
 
         experimental_ranked = rerank_with_lexical_overlap(
-            case["query"],
-            ranked,
+            case["query"], ranked
         )
 
         relevant_total = sum(
@@ -388,17 +423,27 @@ def main():
         )
 
         experimental_recalls_at_5.append(
-            sum(
-                relevant
-                for _, _, relevant in experimental_ranked[:TOP_K]
-            ) / relevant_total if relevant_total else 0.0
+            (
+                sum(
+                    relevant
+                    for _, _, relevant in experimental_ranked[:TOP_K]
+                )
+                / relevant_total
+            )
+            if relevant_total
+            else 0.0
         )
 
         experimental_recalls_at_3.append(
-            sum(
-                relevant
-                for _, _, relevant in experimental_ranked[:EVAL_K]
-            ) / relevant_total if relevant_total else 0.0
+            (
+                sum(
+                    relevant
+                    for _, _, relevant in experimental_ranked[:EVAL_K]
+                )
+                / relevant_total
+            )
+            if relevant_total
+            else 0.0
         )
 
         experimental_reciprocal_ranks.append(
@@ -408,9 +453,7 @@ def main():
         print(f"\nCase {index}: {case['query']}")
 
         print("\nBaseline ranking (semantic only):")
-        for rank, (score, text, relevant) in enumerate(
-            ranked, start=1
-        ):
+        for rank, (score, text, relevant) in enumerate(ranked, start=1):
             label = "RELEVANT" if relevant else "NOT RELEVANT"
             print(f"{rank}. {score:.4f} [{label}] {text}")
 
@@ -424,17 +467,12 @@ def main():
         print(f"\nBaseline Recall@{TOP_K}: {recall_at_5:.2f}")
         print(f"Baseline Recall@{EVAL_K}: {recall_at_3:.2f}")
         print(f"Baseline reciprocal rank: {reciprocal_rank_score:.2f}")
-        print("\n=== Baseline results ===")
-        print(f"Test cases: {len(CASES)}")
+
+    print("\n=== Baseline results ===")
+    print(f"Test cases: {len(CASES)}")
     print(f"Unique query texts: {len(unique_queries)}")
-    print(
-        f"Mean Recall@{TOP_K}: "
-        f"{mean_metric(recalls_at_5):.3f}"
-    )
-    print(
-        f"Mean Recall@{EVAL_K}: "
-        f"{mean_metric(recalls_at_3):.3f}"
-    )
+    print(f"Mean Recall@{TOP_K}: {mean_metric(recalls_at_5):.3f}")
+    print(f"Mean Recall@{EVAL_K}: {mean_metric(recalls_at_3):.3f}")
     print(f"MRR: {mean_metric(reciprocal_ranks):.3f}")
 
     print("\n=== Experimental results ===")
@@ -446,30 +484,47 @@ def main():
         f"Mean Recall@{EVAL_K}: "
         f"{mean_metric(experimental_recalls_at_3):.3f}"
     )
-    print(
-        f"MRR: {mean_metric(experimental_reciprocal_ranks):.3f}"
-    )
+    print(f"MRR: {mean_metric(experimental_reciprocal_ranks):.3f}")
+
     print("\n=== Experimental change ===")
-    print(
-        f"Recall@{TOP_K} delta: "
-        f"{metric_delta(
-            mean_metric(recalls_at_5),
-            mean_metric(experimental_recalls_at_5),
-        ):+.3f}"
+
+    recall_at_5_delta = metric_delta(
+        mean_metric(recalls_at_5),
+        mean_metric(experimental_recalls_at_5),
     )
-    print(
-        f"Recall@{EVAL_K} delta: "
-        f"{metric_delta(
-            mean_metric(recalls_at_3),
-            mean_metric(experimental_recalls_at_3),
-        ):+.3f}"
+    recall_at_3_delta = metric_delta(
+        mean_metric(recalls_at_3),
+        mean_metric(experimental_recalls_at_3),
     )
-    print(
-        f"MRR delta: "
-        f"{metric_delta(
-            mean_metric(reciprocal_ranks),
-            mean_metric(experimental_reciprocal_ranks),
-        ):+.3f}"
+    mrr_delta = metric_delta(
+        mean_metric(reciprocal_ranks),
+        mean_metric(experimental_reciprocal_ranks),
     )
+
+    print(f"Recall@{TOP_K} delta: {recall_at_5_delta:+.3f}")
+    print(f"Recall@{EVAL_K} delta: {recall_at_3_delta:+.3f}")
+    print(f"MRR delta: {mrr_delta:+.3f}")
+
+    deltas = {
+        "recall_at_5": recall_at_5_delta,
+        "recall_at_3": recall_at_3_delta,
+        "mrr": mrr_delta,
+    }
+
+    has_improvement = any(delta > 0 for delta in deltas.values())
+    has_regression = any(delta < 0 for delta in deltas.values())
+
+    if has_improvement and has_regression:
+        outcome = "mixed"
+    elif has_improvement:
+        outcome = "improved"
+    elif has_regression:
+        outcome = "regressed"
+    else:
+        outcome = "unchanged"
+
+    print(f"Overall outcome: {outcome}")
+
+
 if __name__ == "__main__":
     main()

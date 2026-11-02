@@ -4,6 +4,12 @@ from scripts.evaluate_retrieval import validate_case, validate_cases
 from scripts.evaluate_retrieval import mean_metric
 from scripts.evaluate_retrieval import reciprocal_rank
 from scripts.evaluate_retrieval import (
+    compare_rankings,
+    evaluate_case,
+    lexical_overlap,
+    rerank_with_lexical_overlap,
+)
+from scripts.evaluate_retrieval import (
     evaluate_case,
     lexical_overlap,
     rerank_with_lexical_overlap,
@@ -388,3 +394,67 @@ def test_metric_delta_returns_experimental_minus_baseline(
         baseline,
         experimental,
     ) == pytest.approx(expected)
+def test_compare_rankings_detects_improvement():
+    baseline = [
+        (0.9, "irrelevant evidence", False),
+        (0.8, "relevant evidence", True),
+    ]
+    experimental = [
+        (0.9, "relevant evidence", True),
+        (0.8, "irrelevant evidence", False),
+    ]
+
+    result = retrieval_evaluation.compare_rankings(
+        baseline,
+        experimental,
+    )
+
+    assert result["baseline"]["mrr"] == pytest.approx(0.5)
+    assert result["experimental"]["mrr"] == pytest.approx(1.0)
+    assert result["deltas"]["mrr"] == pytest.approx(0.5)
+    assert result["outcome"] == "improved"
+
+
+def test_compare_rankings_detects_regression():
+    baseline = [
+        (0.9, "relevant evidence", True),
+        (0.8, "irrelevant evidence", False),
+    ]
+    experimental = [
+        (0.9, "irrelevant evidence", False),
+        (0.8, "relevant evidence", True),
+    ]
+
+    result = retrieval_evaluation.compare_rankings(
+        baseline,
+        experimental,
+    )
+
+    assert result["deltas"]["mrr"] == pytest.approx(-0.5)
+    assert result["outcome"] == "regressed"
+
+
+def test_compare_rankings_handles_unchanged_metrics():
+    ranked = [
+        (0.9, "relevant evidence", True),
+        (0.8, "irrelevant evidence", False),
+    ]
+
+    result = retrieval_evaluation.compare_rankings(ranked, ranked)
+
+    assert result["deltas"]["mrr"] == pytest.approx(0.0)
+    assert result["outcome"] == "unchanged"
+
+
+def test_compare_rankings_handles_no_relevant_candidates():
+    ranked = [
+        (0.9, "irrelevant evidence", False),
+        (0.8, "unrelated evidence", False),
+    ]
+
+    result = retrieval_evaluation.compare_rankings(ranked, ranked)
+
+    assert result["baseline"]["recall_at_5"] == 0.0
+    assert result["baseline"]["recall_at_3"] == 0.0
+    assert result["baseline"]["mrr"] == 0.0
+    assert result["outcome"] == "unchanged"
