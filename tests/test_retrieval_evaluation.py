@@ -131,8 +131,6 @@ def test_evaluate_case_handles_empty_candidates():
     assert recall_at_5 == 0.0
     assert recall_at_3 == 0.0
     assert rr == 0.0
-
-
 def test_evaluate_case_handles_k_larger_than_candidate_count():
     case = {
         "query": "payment failure",
@@ -158,6 +156,38 @@ def test_evaluate_case_handles_k_larger_than_candidate_count():
     assert recall_at_3 == pytest.approx(1.0)
     assert rr == pytest.approx(1.0)
 
+@pytest.mark.parametrize(
+    "returned_vectors",
+    [
+        [[1.0, 0.0]],  # Too few: query vector only
+        [
+            [1.0, 0.0],
+            [0.9, 0.1],
+            [0.1, 0.9],
+            [0.5, 0.5],
+        ],  # Too many: query + 3 vectors for 2 candidates
+    ],
+)
+def test_evaluate_case_rejects_wrong_embedding_vector_count(
+    returned_vectors,
+):
+    case = {
+        "query": "payment failure",
+        "candidates": [
+            ("payment service timeout", True),
+            ("unrelated frontend styling", False),
+        ],
+    }
+
+    class MalformedEmbedder:
+        def embed_texts(self, texts):
+            return returned_vectors
+
+    with pytest.raises(
+        ValueError,
+        match="embedder must return one vector per input text",
+    ):
+        evaluate_case(MalformedEmbedder(), case)
 
 # ---------------------------------------------------------
 # Mean metric tests

@@ -287,7 +287,12 @@ def evaluate_case(embedder, case):
 
     candidates = case["candidates"]
     texts = [text for text, _ in candidates]
-    vectors = embedder.embed_texts([case["query"]] + texts)
+    texts_to_embed = [case["query"]] + texts
+    vectors = embedder.embed_texts(texts_to_embed)
+    if len(vectors) != len(texts_to_embed):
+        raise ValueError(
+            "embedder must return one vector per input text"
+        )
 
     ranked = sorted(
         [
