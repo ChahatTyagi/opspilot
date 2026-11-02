@@ -131,3 +131,32 @@ def test_retrieve_cache_respects_maximum_size():
 def test_retrieve_rejects_invalid_cache_size():
     with pytest.raises(ValueError, match="cache_size must be positive"):
         EvidenceRetriever(embedder=FakeEmbedder(), cache_size=0)
+
+@pytest.mark.parametrize(
+    "returned_vectors",
+    [
+        [[1.0, 0.0]],  # Too few: query vector only
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [0.5, 0.5],
+        ],  # Too many: query + extra vector
+    ],
+)
+def test_retrieve_rejects_wrong_number_of_embedding_vectors(
+    returned_vectors,
+):
+    class MalformedEmbedder:
+        def embed_texts(self, texts):
+            return returned_vectors
+
+    retriever = EvidenceRetriever(embedder=MalformedEmbedder())
+    evidence = [make_evidence(1, "Database connection pool exhausted")]
+
+    with pytest.raises(
+        ValueError,
+        match="embedder must return one vector per input text",
+    ):
+        retriever.retrieve("Why is payment failing?", evidence)
+
+    assert retriever._embedding_cache == {}

@@ -61,9 +61,12 @@ class EvidenceRetriever:
 
         texts_to_embed = [query] + missing_texts
         vectors = self.embedder.embed_texts(texts_to_embed)
-
-
+        if len(vectors) != len(texts_to_embed):
+            raise ValueError(
+                "embedder must return one vector per input text"
+            )
         new_embeddings = dict(zip(missing_texts, vectors[1:]))
+
 
         # Keep the current retrieval's vectors available, even if
         # the cache is too small to retain all of them.
