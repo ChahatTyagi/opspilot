@@ -1056,3 +1056,111 @@ def test_get_investigation_report_for_missing_incident():
     response = client.get("/incidents/999999/report")
 
     assert response.status_code == 404
+
+def test_run_ai_investigation_endpoint(monkeypatch):
+    from app.ai_models import (
+        AIConfidence,
+        AIFact,
+        AIInvestigationResult,
+    )
+
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Database connection failures",
+            "description": "Database requests are failing.",
+            "service": "payment-service",
+            "severity": "high",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    evidence_response = client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "log",
+            "content": "ERROR database connection failed",
+        },
+    )
+    assert evidence_response.status_code == 201
+
+    expected_result = AIInvestigationResult(
+        observed_facts=[
+            AIFact(
+                statement="Database connection failures were observed.",
+                evidence_ids=[evidence_response.json()["id"]],
+            )
+        ],
+        hypotheses=[],
+        recommended_checks=["Check database connectivity."],
+        unknowns=["Whether the database is currently available."],
+    )
+
+    captured = {}
+
+    def fake_investigation(*, incident, evidence):
+        captured["incident"] = incident
+        captured["evidence"] = evidence
+        return expected_result
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        fake_investigation,
+    )
+
+    response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["observed_facts"][0]["evidence_ids"] == [
+        evidence_response.json()["id"]
+    ]
+    assert data["recommended_checks"] == [
+        "Check database connectivity."
+    ]
+    assert captured["incident"].id == incident_id
+    assert len(captured["evidence"]) == 1
+
+
+def test_run_ai_investigation_endpoint_missing_incident():
+    response = client.post(
+        "/incidents/999999/investigate"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Incident 999999 not found"
+
+
+def test_run_ai_investigation_endpoint_invalid_evidence(
+    monkeypatch,
+):
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Checkout errors",
+            "description": "Checkout requests are failing.",
+            "service": "checkout",
+            "severity": "medium",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    def fake_investigation(**kwargs):
+        raise ValueError("Invalid evidence reference")
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        fake_investigation,
+    )
+
+    response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "AI investigation returned invalid evidence references"
+    )

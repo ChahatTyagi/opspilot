@@ -3,7 +3,9 @@ import re
 import time
 import uuid
 from sqlalchemy.exc import SQLAlchemyError
-
+from app.ai_models import AIInvestigationResult
+from app.investigation_service import run_ai_investigation
+from app.llm_client import LLMConfigurationError
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 
 from sqlalchemy import select, text
@@ -379,6 +381,48 @@ def get_investigation_context(
         evidence_counts=counts,
         evidence=evidence,
     )
+
+@app.post(
+    "/incidents/{incident_id}/investigate",
+    response_model=AIInvestigationResult,
+)
+def investigate_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident {incident_id} not found",
+        )
+
+    statement = (
+        select(IncidentEvidence)
+        .where(IncidentEvidence.incident_id == incident_id)
+        .order_by(
+            IncidentEvidence.created_at,
+            IncidentEvidence.id,
+        )
+    )
+    evidence = list(db.scalars(statement).all())
+
+    try:
+        return run_ai_investigation(
+            incident=incident,
+            evidence=evidence,
+        )
+    except LLMConfigurationError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI investigation is not configured",
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="AI investigation returned invalid evidence references",
+        )
 @app.get(
     "/incidents/{incident_id}/analyze",
     response_model=EvidenceAnalysisResponse,
