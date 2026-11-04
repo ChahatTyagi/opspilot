@@ -54,7 +54,14 @@ def test_reranker_preserves_candidates():
         "relevant evidence",
         "irrelevant evidence",
     }
+def test_classify_outcome_detects_mixed_changes():
+    deltas = {
+        "recall_at_5": 0.1,
+        "recall_at_3": -0.2,
+        "mrr": 0.05,
+    }
 
+    assert retrieval_evaluation.classify_outcome(deltas) == "mixed"
 
 # ---------------------------------------------------------
 # Evaluation tests
@@ -566,7 +573,7 @@ def test_compare_rankings_detects_regression():
     assert result["deltas"]["mrr"] < 0
 
 
-def test_compare_rankings_detects_mixed_metric_changes():
+def test_compare_rankings_detects_recall_at_3_regression():
     baseline_ranked = [
         (0.9, "relevant-1", True),
         (0.8, "irrelevant-1", False),
