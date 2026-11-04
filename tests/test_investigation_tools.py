@@ -143,3 +143,81 @@ def test_search_returns_only_public_result_fields():
         "source_type",
         "text",
     }
+
+
+def test_search_skips_evidence_with_missing_fields():
+    malformed_evidence = SimpleNamespace(
+        incident_id=42,
+        content="Database timeout occurred.",
+        source_type="log",
+    )
+
+    valid_evidence = make_evidence(
+        evidence_id=11,
+        content="Database timeout in checkout.",
+    )
+
+    results = search_incident_evidence(
+        query="database timeout",
+        incident_id=42,
+        evidence_items=[malformed_evidence, valid_evidence],
+    )
+
+    assert len(results) == 1
+    assert results[0]["evidence_id"] == 11
+
+
+@pytest.mark.parametrize(
+    "invalid_content",
+    [123, ["Database timeout"], {"text": "Database timeout"}],
+)
+def test_search_skips_evidence_with_invalid_content_type(
+    invalid_content,
+):
+    evidence = [
+        make_evidence(
+            evidence_id=10,
+            content=invalid_content,
+        ),
+        make_evidence(
+            evidence_id=11,
+            content="Database timeout in checkout.",
+        ),
+    ]
+
+    results = search_incident_evidence(
+        query="database timeout",
+        incident_id=42,
+        evidence_items=evidence,
+    )
+
+    assert len(results) == 1
+    assert results[0]["evidence_id"] == 11
+
+
+def test_search_skips_evidence_with_invalid_id_or_source_type():
+    evidence = [
+        make_evidence(
+            evidence_id="invalid-id",
+            content="Database timeout.",
+        ),
+        make_evidence(
+            evidence_id=11,
+            content="Database timeout.",
+            source_type=None,
+        ),
+        make_evidence(
+            evidence_id=12,
+            content="Database timeout in checkout.",
+            source_type="log",
+        ),
+    ]
+
+    results = search_incident_evidence(
+        query="database timeout",
+        incident_id=42,
+        evidence_items=evidence,
+    )
+
+    assert len(results) == 1
+    assert results[0]["evidence_id"] == 12

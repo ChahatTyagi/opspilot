@@ -1,3 +1,4 @@
+
 MAX_QUERY_LENGTH = 500
 MAX_RESULTS_LIMIT = 10
 MAX_TEXT_LENGTH = 1000
@@ -9,7 +10,7 @@ def search_incident_evidence(
     evidence_items,
     max_results: int = 5,
 ) -> list[dict]:
-    """Search only the supplied evidence belonging to one incident."""
+    """Search bounded evidence belonging to one incident."""
 
     if not isinstance(query, str):
         raise ValueError("Query must be a string.")
@@ -36,13 +37,34 @@ def search_incident_evidence(
     matches = []
 
     for item in evidence_items:
-        if item.incident_id != incident_id:
+        # Ignore malformed records rather than failing the entire search.
+        try:
+            item_incident_id = item.incident_id
+            evidence_id = item.id
+            source_type = item.source_type
+            content = item.content
+        except AttributeError:
             continue
 
-        text = item.content or ""
+        # Keep the search strictly scoped to this incident.
+        if item_incident_id != incident_id:
+            continue
+
+        # Validate fields used in matching and returned results.
+        if (
+            not isinstance(evidence_id, int)
+            or isinstance(evidence_id, bool)
+            or not isinstance(source_type, str)
+            or not isinstance(content, (str, type(None)))
+        ):
+            continue
+
+        text = content or ""
         normalized_text = text.casefold()
+
         matching_terms = [
-            term for term in query_terms if term in normalized_text
+            term for term in query_terms
+            if term in normalized_text
         ]
 
         if not matching_terms:
@@ -50,16 +72,19 @@ def search_incident_evidence(
 
         matches.append(
             {
-                "incident_id": item.incident_id,
-                "evidence_id": item.id,
-                "source_type": item.source_type,
+                "incident_id": item_incident_id,
+                "evidence_id": evidence_id,
+                "source_type": source_type,
                 "text": text[:MAX_TEXT_LENGTH],
                 "match_count": len(matching_terms),
             }
         )
 
-    # Rank by number of matching query terms; preserve original order for ties.
-    matches.sort(key=lambda result: result["match_count"], reverse=True)
+    # Rank by matching terms; preserve original order for ties.
+    matches.sort(
+        key=lambda result: result["match_count"],
+        reverse=True,
+    )
 
     return [
         {
