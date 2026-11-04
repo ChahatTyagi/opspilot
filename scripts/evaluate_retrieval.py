@@ -1,9 +1,10 @@
 import re
 
+from math import isfinite
+from numbers import Real
+
 from app.embeddings import LocalEmbedder
 from app.retrieval import cosine_similarity
-
-
 CASES = [
     {
         "query": "Why is the payment service failing?",
@@ -281,7 +282,31 @@ def reciprocal_rank(ranked):
 
     return 1 / first_relevant_rank if first_relevant_rank else 0.0
 
+def validate_embedding_vectors(vectors):
+    """Validate embedding vector structure, dimensions, and values."""
+    error_message = "invalid embedding vectors"
 
+    if not isinstance(vectors, (list, tuple)) or not vectors:
+        raise ValueError(error_message)
+
+    expected_dimensions = None
+
+    for vector in vectors:
+        if not isinstance(vector, (list, tuple)) or not vector:
+            raise ValueError(error_message)
+
+        if expected_dimensions is None:
+            expected_dimensions = len(vector)
+        elif len(vector) != expected_dimensions:
+            raise ValueError(error_message)
+
+        for value in vector:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not isfinite(value)
+            ):
+                raise ValueError(error_message)
 def evaluate_case(embedder, case):
     validate_case(case)
 
@@ -293,6 +318,7 @@ def evaluate_case(embedder, case):
         raise ValueError(
             "embedder must return one vector per input text"
         )
+    validate_embedding_vectors(vectors)
 
     ranked = sorted(
         [

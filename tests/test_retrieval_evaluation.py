@@ -204,7 +204,6 @@ def test_mean_metric_returns_zero_for_empty_values():
 # ---------------------------------------------------------
 # Case validation tests
 # ---------------------------------------------------------
-
 @pytest.mark.parametrize(
     "case",
     [
@@ -217,6 +216,33 @@ def test_mean_metric_returns_zero_for_empty_values():
 def test_validate_case_rejects_invalid_case_structure(case):
     with pytest.raises(ValueError):
         validate_case(case)
+
+@pytest.mark.parametrize(
+    "returned_vectors",
+    [
+        [[1.0, 0.0], [0.9]],  # Different dimensions
+        [[1.0, 0.0], []],  # Empty candidate vector
+        [[1.0, 0.0], [float("nan"), 0.1]],  # NaN
+        [[1.0, 0.0], [float("inf"), 0.1]],  # Infinity
+        [[1.0, 0.0], ["bad", 0.1]],  # Non-numeric value
+    ],
+)
+def test_evaluate_case_rejects_malformed_embedding_vectors(
+    returned_vectors,
+):
+    case = {
+        "query": "payment failure",
+        "candidates": [
+            ("payment service timeout", True),
+        ],
+    }
+
+    class MalformedEmbedder:
+        def embed_texts(self, texts):
+            return returned_vectors
+
+    with pytest.raises(ValueError, match="invalid embedding vectors"):
+        evaluate_case(MalformedEmbedder(), case)
 
 
 @pytest.mark.parametrize(
