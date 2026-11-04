@@ -1,3 +1,4 @@
+
 import json
 from typing import Any, Sequence
 
@@ -32,6 +33,9 @@ class InvestigationToolExecutor:
         self.max_calls = max_calls
         self.call_count = 0
         self.seen_calls = set()
+
+        # Track only evidence IDs actually returned by successful searches.
+        self.returned_evidence_ids: set[int] = set()
 
         # Explicit allowlist: no dynamic imports, eval, shell, or arbitrary code.
         self._tools = {
@@ -126,10 +130,17 @@ class InvestigationToolExecutor:
         }
 
     def _search_incident_evidence(self, arguments: dict) -> dict:
+        """Search evidence for this incident and track returned evidence IDs."""
+
         results = search_incident_evidence(
             query=arguments["query"],
             incident_id=self.incident_id,
             evidence_items=self.evidence_items,
+        )
+
+        self.returned_evidence_ids.update(
+            item["evidence_id"]
+            for item in results
         )
 
         return {"results": results}

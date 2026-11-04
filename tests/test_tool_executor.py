@@ -165,3 +165,12 @@ def test_invalid_request_does_not_consume_call_limit(executor):
     assert invalid["ok"] is False
     assert valid["ok"] is True
     assert executor.call_count == 1
+
+def test_executor_tracks_only_evidence_returned_by_search(executor):
+    result = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "database"},
+    )
+
+    assert result["ok"] is True
+    assert executor.returned_evidence_ids == {10}
