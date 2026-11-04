@@ -115,3 +115,27 @@ def test_run_ai_investigation_rejects_evidence_omitted_from_context(
             incident=make_incident(),
             evidence=evidence,
         )
+
+def test_run_ai_investigation_rejects_evidence_from_another_incident(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.investigation_service.generate_investigation",
+        lambda **kwargs: make_result(evidence_ids=[10]),
+    )
+
+    with pytest.raises(ValueError, match="belong to incident"):
+        run_ai_investigation(
+            incident=make_incident(),
+            evidence=[
+                SimpleNamespace(
+                    id=10,
+                    incident_id=999,
+                    source_type="log",
+                    content="Database timeout",
+                    created_at=datetime(
+                        2026, 11, 4, tzinfo=timezone.utc
+                    ),
+                )
+            ],
+        )

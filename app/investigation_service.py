@@ -17,8 +17,13 @@ def run_ai_investigation(
 ) -> AIInvestigationResult:
     """Build bounded context, run the LLM, and validate its citations."""
 
-    incident_context = build_incident_context(incident, evidence)
+    for item in evidence:
+        if item.incident_id != incident.id:
+            raise ValueError(
+                f"Evidence items must belong to incident {incident.id}"
+            )
 
+    incident_context = build_incident_context(incident, evidence)
     # Only evidence included in the bounded context may be cited.
     context_data = json.loads(incident_context)
     valid_evidence_ids = {
