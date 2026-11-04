@@ -270,3 +270,35 @@ def test_generate_investigation_with_tools_enforces_call_limit(
 
     assert executor.execute.call_count == 2
     mock_client.responses.parse.assert_called_once()
+
+def test_generate_investigation_with_tools_rejects_missing_call_id(
+    monkeypatch,
+):
+    mock_client = Mock()
+    mock_client.responses.parse.return_value = SimpleNamespace(
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="search_incident_evidence",
+                arguments=json.dumps({"query": "database"}),
+                # call_id intentionally missing
+            )
+        ]
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_openai_model",
+        lambda: "test-model",
+    )
+
+    executor = Mock()
+    executor.max_calls = 5
+
+    with pytest.raises(ValueError, match="Malformed tool call"):
+        generate_investigation_with_tools(
+            incident_context="Incident context",
+            executor=executor,
+            client=mock_client,
+        )
+
+    executor.execute.assert_not_called()

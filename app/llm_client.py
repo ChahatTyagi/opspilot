@@ -118,6 +118,7 @@ def generate_investigation_with_tools(
         max_tool_calls=5,
         text_format=AIInvestigationResult,
     )
+
     # Enforce a total limit across all tool-call rounds.
     tool_call_count = 0
 
@@ -133,26 +134,47 @@ def generate_investigation_with_tools(
             break
 
         tool_outputs = []
+
         for tool_call in tool_calls:
             if tool_call_count >= executor.max_calls:
-                raise ValueError("LLM exceeded the investigation tool-call limit")
+                raise ValueError(
+                    "LLM exceeded the investigation tool-call limit"
+                )
 
             tool_call_count += 1
 
-            try:
-                arguments = json.loads(tool_call.arguments)
-            except (TypeError, json.JSONDecodeError) as exc:
-                raise ValueError("Invalid tool arguments returned by the LLM") from exc
+            # Validate required metadata before parsing or executing the call.
+            tool_name = getattr(tool_call, "name", None)
+            raw_arguments = getattr(tool_call, "arguments", None)
+            call_id = getattr(tool_call, "call_id", None)
 
+            if (
+                not isinstance(tool_name, str)
+                or not tool_name
+                or not isinstance(raw_arguments, str)
+                or not isinstance(call_id, str)
+                or not call_id
+            ):
+                raise ValueError("Malformed tool call returned by the LLM")
+
+            # Parse the tool arguments exactly once.
+            try:
+                arguments = json.loads(raw_arguments)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ValueError(
+                    "Invalid tool arguments returned by the LLM"
+                ) from exc
+
+            # Execute only after metadata and JSON arguments are validated.
             result = executor.execute(
-                tool_name=tool_call.name,
+                tool_name=tool_name,
                 arguments=arguments,
             )
 
             tool_outputs.append(
                 {
                     "type": "function_call_output",
-                    "call_id": tool_call.call_id,
+                    "call_id": call_id,
                     "output": json.dumps(result),
                 }
             )
