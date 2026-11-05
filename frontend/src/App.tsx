@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
 type Incident = {
@@ -38,8 +38,37 @@ function App() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [form, setForm] = useState<IncidentForm>(emptyForm)
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [isLoadingIncidents, setIsLoadingIncidents] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    async function loadIncidents() {
+      setLoadError('')
+
+      try {
+        const response = await fetch('/api/incidents')
+
+        if (!response.ok) {
+          throw new Error('Unable to load incidents. Please try again.')
+        }
+
+        const loadedIncidents: Incident[] = await response.json()
+        setIncidents(loadedIncidents)
+      } catch (loadError) {
+        setLoadError(
+          loadError instanceof Error
+            ? loadError.message
+            : 'An unexpected error occurred while loading incidents.',
+        )
+      } finally {
+        setIsLoadingIncidents(false)
+      }
+    }
+
+    loadIncidents()
+  }, [])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -106,6 +135,7 @@ function App() {
         </div>
 
         <div className="nav-section-label">WORKSPACE</div>
+
         <nav className="navigation" aria-label="Main navigation">
           {navigationItems.map((item) => (
             <button
@@ -134,6 +164,7 @@ function App() {
             <span className="breadcrumb-divider">/</span>
             <strong>Overview</strong>
           </div>
+
           <div className="topbar-status">
             <span className="status-dot" />
             Incident intelligence
@@ -183,9 +214,11 @@ function App() {
 
           <div className="overview-grid">
             <article className="overview-card">
-              <div className="card-label">Incidents created this session</div>
-              <div className="card-placeholder">{incidents.length}</div>
-              <p>New incidents saved to the backend</p>
+              <div className="card-label">Incidents</div>
+              <div className="card-placeholder">
+                {isLoadingIncidents ? '…' : incidents.length}
+              </div>
+              <p>Incidents loaded from the backend</p>
             </article>
 
             <article className="overview-card">
@@ -201,11 +234,24 @@ function App() {
             </article>
           </div>
 
+          {isLoadingIncidents && (
+            <p className="page-description">Loading incidents...</p>
+          )}
+
+          {loadError && <p className="form-error">{loadError}</p>}
+
+          {!isLoadingIncidents && !loadError && incidents.length === 0 && (
+            <div className="section-heading">
+              <h2>No incidents yet</h2>
+              <span>Create an incident to get started</span>
+            </div>
+          )}
+
           {incidents.length > 0 && (
             <section className="incident-list-section">
               <div className="section-heading">
-                <h2>Recently created incidents</h2>
-                <span>{incidents.length} this session</span>
+                <h2>Incidents</h2>
+                <span>{incidents.length} loaded</span>
               </div>
 
               <div className="incident-list">
@@ -218,7 +264,10 @@ function App() {
                         </span>
                         <h3>{incident.title}</h3>
                       </div>
-                      <span className={`severity-badge severity-${incident.severity}`}>
+
+                      <span
+                        className={`severity-badge severity-${incident.severity}`}
+                      >
                         {incident.severity}
                       </span>
                     </div>
@@ -257,6 +306,7 @@ function App() {
                 <h2 id="incident-form-title">Create an incident</h2>
                 <p>Provide the initial details for investigation.</p>
               </div>
+
               <button
                 className="modal-close-button"
                 type="button"
@@ -320,7 +370,8 @@ function App() {
                     onChange={(event) =>
                       setForm({
                         ...form,
-                        environment: event.target.value as IncidentForm['environment'],
+                        environment:
+                          event.target.value as IncidentForm['environment'],
                       })
                     }
                   >
@@ -338,7 +389,8 @@ function App() {
                     onChange={(event) =>
                       setForm({
                         ...form,
-                        severity: event.target.value as IncidentForm['severity'],
+                        severity:
+                          event.target.value as IncidentForm['severity'],
                       })
                     }
                   >
@@ -361,6 +413,7 @@ function App() {
                 >
                   Cancel
                 </button>
+
                 <button
                   className="primary-button"
                   type="submit"
