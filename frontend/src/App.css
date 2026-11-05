@@ -372,3 +372,270 @@
     padding: 18px;
   }
 }
+
+/* Incident creation modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.58);
+  overflow-y: auto;
+}
+
+.incident-modal {
+  width: min(100%, 620px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 28px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
+}
+
+.modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.modal-heading h2 {
+  margin: 0;
+  color: #182033;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+}
+
+.modal-heading p:not(.eyebrow) {
+  margin: 8px 0 0;
+  color: #7b8496;
+  font-size: 13px;
+}
+
+.modal-close-button {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.modal-close-button:hover {
+  background: #e2e8f0;
+}
+
+.incident-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.incident-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.incident-form input,
+.incident-form textarea,
+.incident-form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d2433;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  outline: none;
+}
+
+.incident-form textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.incident-form input:focus,
+.incident-form textarea:focus,
+.incident-form select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-error {
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.secondary-button {
+  padding: 11px 16px;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: #f8fafc;
+}
+
+.primary-button {
+  cursor: pointer;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.modal-close-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Created incidents */
+.incident-list-section {
+  margin-top: 32px;
+}
+
+.incident-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.incident-card {
+  padding: 20px;
+  border: 1px solid #e8ebf2;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.incident-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.incident-id {
+  color: #6366f1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.incident-card h3 {
+  margin: 6px 0 0;
+  color: #20283b;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.severity-badge {
+  padding: 5px 9px;
+  border-radius: 20px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.severity-low {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.severity-medium {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.severity-high {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.severity-critical {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.incident-description {
+  margin: 14px 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.incident-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: #8a93a4;
+  font-size: 11px;
+}
+
+/* Modal responsiveness */
+@media (max-width: 600px) {
+  .modal-backdrop {
+    padding: 10px;
+    align-items: start;
+  }
+
+  .incident-modal {
+    max-height: calc(100vh - 20px);
+    padding: 20px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+}
