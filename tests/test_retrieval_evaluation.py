@@ -627,3 +627,42 @@ def test_compare_rankings_handles_no_relevant_candidates():
 
     assert result["outcome"] == "unchanged"
     assert result["deltas"]["mrr"] == 0.0
+
+def test_compare_rankings_handles_empty_rankings():
+    result = compare_rankings([], [])
+
+    assert result["baseline"] == {
+        "recall_at_5": 0.0,
+        "recall_at_3": 0.0,
+        "mrr": 0.0,
+    }
+    assert result["experimental"] == {
+        "recall_at_5": 0.0,
+        "recall_at_3": 0.0,
+        "mrr": 0.0,
+    }
+    assert result["deltas"] == {
+        "recall_at_5": 0.0,
+        "recall_at_3": 0.0,
+        "mrr": 0.0,
+    }
+    assert result["outcome"] == "unchanged"
+
+
+def test_compare_rankings_detects_improvement_from_empty_baseline():
+    experimental_ranked = [
+        (0.9, "relevant evidence", True),
+        (0.8, "irrelevant evidence", False),
+    ]
+
+    result = compare_rankings([], experimental_ranked)
+
+    assert result["baseline"]["recall_at_5"] == 0.0
+    assert result["baseline"]["recall_at_3"] == 0.0
+    assert result["baseline"]["mrr"] == 0.0
+
+    assert result["experimental"]["recall_at_5"] == pytest.approx(1.0)
+    assert result["experimental"]["recall_at_3"] == pytest.approx(1.0)
+    assert result["experimental"]["mrr"] == pytest.approx(1.0)
+
+    assert result["outcome"] == "improved"
