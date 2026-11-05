@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import './App.css'
 
@@ -19,6 +20,9 @@ type IncidentForm = {
   environment: '' | 'production' | 'staging' | 'development'
   severity: 'low' | 'medium' | 'high' | 'critical'
 }
+
+type IncidentStatusFilter = 'all' | Incident['status']
+type IncidentSeverityFilter = 'all' | Incident['severity']
 
 const navigationItems = [
   { label: 'Overview', icon: '▦', active: true },
@@ -42,6 +46,11 @@ function App() {
   const [loadError, setLoadError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  const [statusFilter, setStatusFilter] =
+    useState<IncidentStatusFilter>('all')
+  const [severityFilter, setSeverityFilter] =
+    useState<IncidentSeverityFilter>('all')
 
   useEffect(() => {
     async function loadIncidents() {
@@ -69,6 +78,16 @@ function App() {
 
     loadIncidents()
   }, [])
+
+  const filteredIncidents = incidents.filter((incident) => {
+    const matchesStatus =
+      statusFilter === 'all' || incident.status === statusFilter
+
+    const matchesSeverity =
+      severityFilter === 'all' || incident.severity === severityFilter
+
+    return matchesStatus && matchesSeverity
+  })
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -103,6 +122,7 @@ function App() {
         createdIncident,
         ...currentIncidents,
       ])
+
       setForm(emptyForm)
       setIsFormOpen(false)
     } catch (submissionError) {
@@ -251,11 +271,50 @@ function App() {
             <section className="incident-list-section">
               <div className="section-heading">
                 <h2>Incidents</h2>
-                <span>{incidents.length} loaded</span>
+                <span>
+                  {filteredIncidents.length} of {incidents.length} shown
+                </span>
+              </div>
+
+              <div className="incident-filters">
+                <label>
+                  Status
+                  <select
+                    value={statusFilter}
+                    onChange={(event) =>
+                      setStatusFilter(
+                        event.target.value as IncidentStatusFilter,
+                      )
+                    }
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="open">Open</option>
+                    <option value="investigating">Investigating</option>
+                    <option value="resolved">Resolved</option>
+                  </select>
+                </label>
+
+                <label>
+                  Severity
+                  <select
+                    value={severityFilter}
+                    onChange={(event) =>
+                      setSeverityFilter(
+                        event.target.value as IncidentSeverityFilter,
+                      )
+                    }
+                  >
+                    <option value="all">All severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </label>
               </div>
 
               <div className="incident-list">
-                {incidents.map((incident) => (
+                {filteredIncidents.map((incident) => (
                   <article className="incident-card" key={incident.id}>
                     <div className="incident-card-heading">
                       <div>
@@ -285,6 +344,12 @@ function App() {
                     </div>
                   </article>
                 ))}
+
+                {filteredIncidents.length === 0 && (
+                  <p className="page-description">
+                    No incidents match the selected filters.
+                  </p>
+                )}
               </div>
             </section>
           )}
