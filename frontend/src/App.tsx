@@ -2,6 +2,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || '/api'
+).replace(/\/$/, '')
+
 type Incident = {
   id: number
   title: string
@@ -85,7 +89,7 @@ function App() {
       setIsLoadingIncidents(true)
 
       try {
-        const response = await fetch('/api/incidents')
+        const response = await fetch(`${API_BASE_URL}/incidents`)
 
         if (!response.ok) {
           throw new Error('Unable to load incidents. Please try again.')
@@ -163,7 +167,7 @@ function App() {
     setIsSubmitting(true)
 
     try {
-      const response = await fetch('/api/incidents', {
+      const response = await fetch(`${API_BASE_URL}/incidents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -227,13 +231,16 @@ function App() {
     setUpdatingIncidentIds((currentIds) => [...currentIds, incidentId])
 
     try {
-      const response = await fetch(`/api/incidents/${incidentId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `${API_BASE_URL}/incidents/${incidentId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: newStatus }),
         },
-        body: JSON.stringify({ status: newStatus }),
-      })
+      )
 
       if (!response.ok) {
         const responseBody = await response.json().catch(() => null)
