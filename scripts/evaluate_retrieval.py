@@ -424,13 +424,8 @@ def main():
     validate_cases(CASES)
     embedder = LocalEmbedder()
 
-    recalls_at_5 = []
-    recalls_at_3 = []
-    reciprocal_ranks = []
-
-    experimental_recalls_at_5 = []
-    experimental_recalls_at_3 = []
-    experimental_reciprocal_ranks = []
+    baseline_results = []
+    experimental_results = []
 
     unique_queries = {case["query"] for case in CASES}
 
@@ -442,45 +437,14 @@ def main():
             reciprocal_rank_score,
         ) = evaluate_case(embedder, case)
 
-        recalls_at_5.append(recall_at_5)
-        recalls_at_3.append(recall_at_3)
-        reciprocal_ranks.append(reciprocal_rank_score)
-
         experimental_ranked = rerank_with_lexical_overlap(
             case["query"], ranked
         )
 
-        relevant_total = sum(
-            relevant for _, _, relevant in experimental_ranked
-        )
+        comparison = compare_rankings(ranked, experimental_ranked)
 
-        experimental_recalls_at_5.append(
-            (
-                sum(
-                    relevant
-                    for _, _, relevant in experimental_ranked[:TOP_K]
-                )
-                / relevant_total
-            )
-            if relevant_total
-            else 0.0
-        )
-
-        experimental_recalls_at_3.append(
-            (
-                sum(
-                    relevant
-                    for _, _, relevant in experimental_ranked[:EVAL_K]
-                )
-                / relevant_total
-            )
-            if relevant_total
-            else 0.0
-        )
-
-        experimental_reciprocal_ranks.append(
-            reciprocal_rank(experimental_ranked)
-        )
+        baseline_results.append(comparison["baseline"])
+        experimental_results.append(comparison["experimental"])
 
         print(f"\nCase {index}: {case['query']}")
 
@@ -500,66 +464,76 @@ def main():
         print(f"Baseline Recall@{EVAL_K}: {recall_at_3:.2f}")
         print(f"Baseline reciprocal rank: {reciprocal_rank_score:.2f}")
 
+    baseline_metrics = {
+        "recall_at_5": mean_metric(
+            [result["recall_at_5"] for result in baseline_results]
+        ),
+        "recall_at_3": mean_metric(
+            [result["recall_at_3"] for result in baseline_results]
+        ),
+        "mrr": mean_metric(
+            [result["mrr"] for result in baseline_results]
+        ),
+    }
+
+    experimental_metrics = {
+        "recall_at_5": mean_metric(
+            [result["recall_at_5"] for result in experimental_results]
+        ),
+        "recall_at_3": mean_metric(
+            [result["recall_at_3"] for result in experimental_results]
+        ),
+        "mrr": mean_metric(
+            [result["mrr"] for result in experimental_results]
+        ),
+    }
+
+    deltas = {
+        metric: metric_delta(
+            baseline_metrics[metric],
+            experimental_metrics[metric],
+        )
+        for metric in baseline_metrics
+    }
+
+    outcome = classify_outcome(deltas)
+
     print("\n=== Baseline results ===")
     print(f"Test cases: {len(CASES)}")
     print(f"Unique query texts: {len(unique_queries)}")
-    print(f"Mean Recall@{TOP_K}: {mean_metric(recalls_at_5):.3f}")
-    print(f"Mean Recall@{EVAL_K}: {mean_metric(recalls_at_3):.3f}")
-    print(f"MRR: {mean_metric(reciprocal_ranks):.3f}")
+    print(f"Mean Recall@{TOP_K}: {baseline_metrics['recall_at_5']:.3f}")
+    print(f"Mean Recall@{EVAL_K}: {baseline_metrics['recall_at_3']:.3f}")
+    print(f"MRR: {baseline_metrics['mrr']:.3f}")
 
     print("\n=== Experimental results ===")
     print(
         f"Mean Recall@{TOP_K}: "
-        f"{mean_metric(experimental_recalls_at_5):.3f}"
+        f"{experimental_metrics['recall_at_5']:.3f}"
     )
     print(
         f"Mean Recall@{EVAL_K}: "
-        f"{mean_metric(experimental_recalls_at_3):.3f}"
+        f"{experimental_metrics['recall_at_3']:.3f}"
     )
-    print(f"MRR: {mean_metric(experimental_reciprocal_ranks):.3f}")
+    print(f"MRR: {experimental_metrics['mrr']:.3f}")
+
     print("\n=== Experimental change ===")
-
-    baseline_recall_at_5 = mean_metric(recalls_at_5)
-    experimental_recall_at_5 = mean_metric(experimental_recalls_at_5)
-
-    baseline_recall_at_3 = mean_metric(recalls_at_3)
-    experimental_recall_at_3 = mean_metric(experimental_recalls_at_3)
-
-    baseline_mrr = mean_metric(reciprocal_ranks)
-    experimental_mrr = mean_metric(experimental_reciprocal_ranks)
-
-    recall_at_5_delta = metric_delta(
-        baseline_recall_at_5,
-        experimental_recall_at_5,
-    )
-    recall_at_3_delta = metric_delta(
-        baseline_recall_at_3,
-        experimental_recall_at_3,
-    )
-    mrr_delta = metric_delta(
-        baseline_mrr,
-        experimental_mrr,
-    )
-
     print(
-        f"Recall@{TOP_K}: {baseline_recall_at_5:.3f} -> "
-        f"{experimental_recall_at_5:.3f} ({recall_at_5_delta:+.3f})"
+        f"Recall@{TOP_K}: {baseline_metrics['recall_at_5']:.3f} -> "
+        f"{experimental_metrics['recall_at_5']:.3f} "
+        f"({deltas['recall_at_5']:+.3f})"
     )
     print(
-        f"Recall@{EVAL_K}: {baseline_recall_at_3:.3f} -> "
-        f"{experimental_recall_at_3:.3f} ({recall_at_3_delta:+.3f})"
+        f"Recall@{EVAL_K}: {baseline_metrics['recall_at_3']:.3f} -> "
+        f"{experimental_metrics['recall_at_3']:.3f} "
+        f"({deltas['recall_at_3']:+.3f})"
     )
     print(
-        f"MRR: {baseline_mrr:.3f} -> "
-        f"{experimental_mrr:.3f} ({mrr_delta:+.3f})"
+        f"MRR: {baseline_metrics['mrr']:.3f} -> "
+        f"{experimental_metrics['mrr']:.3f} "
+        f"({deltas['mrr']:+.3f})"
     )
-    deltas = {
-        "recall_at_5": recall_at_5_delta,
-        "recall_at_3": recall_at_3_delta,
-        "mrr": mrr_delta,
-    }
-    outcome = classify_outcome(deltas)
     print(f"Overall outcome: {outcome}")
+
 
 if __name__ == "__main__":
     main()
