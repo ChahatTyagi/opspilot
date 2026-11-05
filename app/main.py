@@ -2,36 +2,36 @@ import logging
 import re
 import time
 import uuid
-from sqlalchemy.exc import SQLAlchemyError
-from app.ai_models import AIInvestigationResult
-from app.investigation_service import run_ai_investigation
-from app.llm_client import LLMConfigurationError
-from fastapi import Depends, FastAPI, HTTPException, Query, status
 
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.ai_models import AIInvestigationResult
+from app.analyzer import analyze_evidence
+from app.config import get_allowed_origins
 from app.database import get_db
 from app.db_models import IncidentEvidence, IncidentRecord
-
+from app.investigation_service import run_ai_investigation
+from app.llm_client import LLMConfigurationError
 from app.models import (
+    EvidenceAnalysisResponse,
+    EvidenceCounts,
+    EvidenceSourceType,
     Incident,
     IncidentCreate,
     IncidentEnvironment,
+    IncidentEvidenceCreate,
+    IncidentEvidenceResponse,
     IncidentSeverity,
     IncidentStatus,
     IncidentUpdate,
-    IncidentEvidenceCreate,
-    IncidentEvidenceResponse,
-    EvidenceSourceType,
-    EvidenceCounts,
     InvestigationContext,
     InvestigationReportResponse,
 )
-from app.analyzer import analyze_evidence
-from app.models import EvidenceAnalysisResponse
-from fastapi import Request
-from fastapi.responses import JSONResponse
 from app.report_builder import build_investigation_report
 from app.retrieval_service import EvidenceRetriever
 logger = logging.getLogger(__name__)
@@ -39,6 +39,13 @@ app = FastAPI(
     title="OpsPilot",
     description="Evidence-driven AI incident investigation",
     version="0.2.0",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_allowed_origins(),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 app.state.evidence_retriever = EvidenceRetriever()
 @app.middleware("http")
