@@ -664,3 +664,37 @@
   color: inherit;
   font: inherit;
 }
+
+.incident-status-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8a93a4;
+  font-size: 11px;
+}
+
+.incident-status-control select {
+  padding: 4px 8px;
+  border: 1px solid #dfe3ec;
+  border-radius: 6px;
+  background: #fff;
+  color: #344054;
+  font: inherit;
+  cursor: pointer;
+}
+
+.incident-status-control select:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.status-saving {
+  color: #6366f1;
+  font-size: 11px;
+}
+
+.status-update-error {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+}

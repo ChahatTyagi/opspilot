@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 
 type Incident = {
@@ -23,6 +23,15 @@ type IncidentForm = {
 
 type IncidentStatusFilter = 'all' | Incident['status']
 type IncidentSeverityFilter = 'all' | Incident['severity']
+type IncidentEnvironmentFilter =
+  | 'all'
+  | NonNullable<Incident['environment']>
+
+type IncidentSortOption =
+  | 'newest'
+  | 'oldest'
+  | 'severity-high'
+  | 'severity-low'
 
 const navigationItems = [
   { label: 'Overview', icon: '▦', active: true },
@@ -38,6 +47,13 @@ const emptyForm: IncidentForm = {
   severity: 'medium',
 }
 
+const severityRank: Record<Incident['severity'], number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+}
+
 function App() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [form, setForm] = useState<IncidentForm>(emptyForm)
@@ -47,14 +63,26 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
+  const [updatingIncidentIds, setUpdatingIncidentIds] = useState<number[]>([])
+  const [statusUpdateErrors, setStatusUpdateErrors] = useState<
+    Record<number, string>
+  >({})
+
   const [statusFilter, setStatusFilter] =
     useState<IncidentStatusFilter>('all')
   const [severityFilter, setSeverityFilter] =
     useState<IncidentSeverityFilter>('all')
+  const [environmentFilter, setEnvironmentFilter] =
+    useState<IncidentEnvironmentFilter>('all')
+  const [sortOption, setSortOption] =
+    useState<IncidentSortOption>('newest')
 
   useEffect(() => {
+    let isActive = true
+
     async function loadIncidents() {
       setLoadError('')
+      setIsLoadingIncidents(true)
 
       try {
         const response = await fetch('/api/incidents')
@@ -64,19 +92,30 @@ function App() {
         }
 
         const loadedIncidents: Incident[] = await response.json()
-        setIncidents(loadedIncidents)
+
+        if (isActive) {
+          setIncidents(loadedIncidents)
+        }
       } catch (loadError) {
-        setLoadError(
-          loadError instanceof Error
-            ? loadError.message
-            : 'An unexpected error occurred while loading incidents.',
-        )
+        if (isActive) {
+          setLoadError(
+            loadError instanceof Error
+              ? loadError.message
+              : 'An unexpected error occurred while loading incidents.',
+          )
+        }
       } finally {
-        setIsLoadingIncidents(false)
+        if (isActive) {
+          setIsLoadingIncidents(false)
+        }
       }
     }
 
     loadIncidents()
+
+    return () => {
+      isActive = false
+    }
   }, [])
 
   const filteredIncidents = incidents.filter((incident) => {
@@ -86,10 +125,39 @@ function App() {
     const matchesSeverity =
       severityFilter === 'all' || incident.severity === severityFilter
 
-    return matchesStatus && matchesSeverity
+    const matchesEnvironment =
+      environmentFilter === 'all' ||
+      incident.environment === environmentFilter
+
+    return matchesStatus && matchesSeverity && matchesEnvironment
   })
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  const displayedIncidents = [...filteredIncidents].sort((a, b) => {
+    switch (sortOption) {
+      case 'newest':
+        return (
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+        )
+
+      case 'oldest':
+        return (
+          new Date(a.created_at).getTime() -
+          new Date(b.created_at).getTime()
+        )
+
+      case 'severity-high':
+        return severityRank[b.severity] - severityRank[a.severity]
+
+      case 'severity-low':
+        return severityRank[a.severity] - severityRank[b.severity]
+
+      default:
+        return 0
+    }
+  })
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
     setIsSubmitting(true)
@@ -100,14 +168,12 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...form,
-          environment: form.environment || null,
-        }),
+        body: JSON.stringify(form),
       })
 
       if (!response.ok) {
         const responseBody = await response.json().catch(() => null)
+
         const message =
           typeof responseBody?.detail === 'string'
             ? responseBody.detail
@@ -133,6 +199,72 @@ function App() {
       )
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function handleStatusChange(
+    incidentId: number,
+    newStatus: Incident['status'],
+  ) {
+    const currentIncident = incidents.find(
+      (incident) => incident.id === incidentId,
+    )
+
+    if (
+      !currentIncident ||
+      currentIncident.status === newStatus ||
+      updatingIncidentIds.includes(incidentId)
+    ) {
+      return
+    }
+
+    setStatusUpdateErrors((currentErrors) => {
+      const updatedErrors = { ...currentErrors }
+      delete updatedErrors[incidentId]
+      return updatedErrors
+    })
+
+    setUpdatingIncidentIds((currentIds) => [...currentIds, incidentId])
+
+    try {
+      const response = await fetch(`/api/incidents/${incidentId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        const responseBody = await response.json().catch(() => null)
+
+        const message =
+          typeof responseBody?.detail === 'string'
+            ? responseBody.detail
+            : 'Unable to update incident status. Please try again.'
+
+        throw new Error(message)
+      }
+
+      const updatedIncident: Incident = await response.json()
+
+      setIncidents((currentIncidents) =>
+        currentIncidents.map((incident) =>
+          incident.id === incidentId ? updatedIncident : incident,
+        ),
+      )
+    } catch (statusError) {
+      setStatusUpdateErrors((currentErrors) => ({
+        ...currentErrors,
+        [incidentId]:
+          statusError instanceof Error
+            ? statusError.message
+            : 'An unexpected error occurred while updating status.',
+      }))
+    } finally {
+      setUpdatingIncidentIds((currentIds) =>
+        currentIds.filter((id) => id !== incidentId),
+      )
     }
   }
 
@@ -272,7 +404,7 @@ function App() {
               <div className="section-heading">
                 <h2>Incidents</h2>
                 <span>
-                  {filteredIncidents.length} of {incidents.length} shown
+                  {displayedIncidents.length} of {incidents.length} shown
                 </span>
               </div>
 
@@ -311,41 +443,112 @@ function App() {
                     <option value="low">Low</option>
                   </select>
                 </label>
+
+                <label>
+                  Environment
+                  <select
+                    value={environmentFilter}
+                    onChange={(event) =>
+                      setEnvironmentFilter(
+                        event.target.value as IncidentEnvironmentFilter,
+                      )
+                    }
+                  >
+                    <option value="all">All environments</option>
+                    <option value="production">Production</option>
+                    <option value="staging">Staging</option>
+                    <option value="development">Development</option>
+                  </select>
+                </label>
+
+                <label>
+                  Sort by
+                  <select
+                    value={sortOption}
+                    onChange={(event) =>
+                      setSortOption(event.target.value as IncidentSortOption)
+                    }
+                  >
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="severity-high">
+                      Severity: highest first
+                    </option>
+                    <option value="severity-low">
+                      Severity: lowest first
+                    </option>
+                  </select>
+                </label>
               </div>
 
               <div className="incident-list">
-                {filteredIncidents.map((incident) => (
-                  <article className="incident-card" key={incident.id}>
-                    <div className="incident-card-heading">
-                      <div>
-                        <span className="incident-id">
-                          INC-{String(incident.id).padStart(4, '0')}
+                {displayedIncidents.map((incident) => {
+                  const isUpdating = updatingIncidentIds.includes(incident.id)
+
+                  return (
+                    <article className="incident-card" key={incident.id}>
+                      <div className="incident-card-heading">
+                        <div>
+                          <span className="incident-id">
+                            INC-{String(incident.id).padStart(4, '0')}
+                          </span>
+                          <h3>{incident.title}</h3>
+                        </div>
+
+                        <span
+                          className={`severity-badge severity-${incident.severity}`}
+                        >
+                          {incident.severity}
                         </span>
-                        <h3>{incident.title}</h3>
                       </div>
 
-                      <span
-                        className={`severity-badge severity-${incident.severity}`}
-                      >
-                        {incident.severity}
-                      </span>
-                    </div>
+                      <p className="incident-description">
+                        {incident.description}
+                      </p>
 
-                    <p className="incident-description">
-                      {incident.description}
-                    </p>
+                      <div className="incident-meta">
+                        <span>Service: {incident.service}</span>
 
-                    <div className="incident-meta">
-                      <span>Service: {incident.service}</span>
-                      <span>Status: {incident.status}</span>
-                      {incident.environment && (
-                        <span>Environment: {incident.environment}</span>
+                        <label className="incident-status-control">
+                          <span>Status:</span>
+                          <select
+                            value={incident.status}
+                            disabled={isUpdating}
+                            onChange={(event) =>
+                              handleStatusChange(
+                                incident.id,
+                                event.target.value as Incident['status'],
+                              )
+                            }
+                            aria-label={`Status for incident ${incident.id}`}
+                          >
+                            <option value="open">Open</option>
+                            <option value="investigating">
+                              Investigating
+                            </option>
+                            <option value="resolved">Resolved</option>
+                          </select>
+
+                          {isUpdating && (
+                            <span className="status-saving">Saving...</span>
+                          )}
+                        </label>
+
+                        <span>
+                          Environment: {incident.environment ?? 'Unknown'}
+                        </span>
+                      </div>
+
+                      {statusUpdateErrors[incident.id] && (
+                        <p className="status-update-error" role="alert">
+                          {statusUpdateErrors[incident.id]}
+                        </p>
                       )}
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  )
+                })}
 
-                {filteredIncidents.length === 0 && (
+                {displayedIncidents.length === 0 && (
                   <p className="page-description">
                     No incidents match the selected filters.
                   </p>
@@ -413,21 +616,21 @@ function App() {
                 />
               </label>
 
-              <label>
-                Affected service
-                <input
-                  value={form.service}
-                  onChange={(event) =>
-                    setForm({ ...form, service: event.target.value })
-                  }
-                  minLength={2}
-                  maxLength={100}
-                  required
-                  placeholder="e.g. checkout-api"
-                />
-              </label>
-
               <div className="form-row">
+                <label>
+                  Affected service
+                  <input
+                    value={form.service}
+                    onChange={(event) =>
+                      setForm({ ...form, service: event.target.value })
+                    }
+                    minLength={2}
+                    maxLength={100}
+                    required
+                    placeholder="e.g. checkout-api"
+                  />
+                </label>
+
                 <label>
                   Environment
                   <select
@@ -439,8 +642,9 @@ function App() {
                           event.target.value as IncidentForm['environment'],
                       })
                     }
+                    required
                   >
-                    <option value="">Not specified</option>
+                    <option value="">Select environment</option>
                     <option value="production">Production</option>
                     <option value="staging">Staging</option>
                     <option value="development">Development</option>
@@ -484,7 +688,7 @@ function App() {
                   type="submit"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Creating…' : 'Create incident'}
+                  {isSubmitting ? 'Creating...' : 'Create incident'}
                 </button>
               </div>
             </form>
