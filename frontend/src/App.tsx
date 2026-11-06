@@ -62,6 +62,10 @@ function App() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [form, setForm] = useState<IncidentForm>(emptyForm)
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [selectedIncidentId, setSelectedIncidentId] =
+    useState<number | null>(null)
+  const selectedIncident =
+    incidents.find((incident) => incident.id === selectedIncidentId) ?? null
   const [isLoadingIncidents, setIsLoadingIncidents] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -331,240 +335,322 @@ function App() {
         </header>
 
         <section className="page-content">
-          <div className="page-heading">
-            <div>
-              <p className="eyebrow">INCIDENT OPERATIONS</p>
-              <h1>Good evening</h1>
-              <p className="page-description">
-                Investigate incidents with evidence, context, and AI-assisted
-                insights.
-              </p>
-            </div>
+          {selectedIncident ? (
+            <div className="incident-details">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setSelectedIncidentId(null)}
+              >
+                ← Back to incidents
+              </button>
 
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => {
-                setError('')
-                setIsFormOpen(true)
-              }}
-            >
-              + New incident
-            </button>
-          </div>
+              <div className="page-heading">
+                <div>
+                  <p className="eyebrow">
+                    INC-{String(selectedIncident.id).padStart(4, '0')}
+                  </p>
+                  <h1>{selectedIncident.title}</h1>
+                  <p className="page-description">
+                    Incident details and investigation workspace.
+                  </p>
+                </div>
 
-          <div className="welcome-panel">
-            <div className="welcome-icon" aria-hidden="true">
-              ✦
-            </div>
-            <div>
-              <h2>Your incident workspace</h2>
-              <p>
-                Your dashboard brings incidents, evidence, and investigation
-                reports together in one place.
-              </p>
-            </div>
-          </div>
-
-          <div className="section-heading">
-            <h2>Workspace overview</h2>
-            <span>Getting started</span>
-          </div>
-
-          <div className="overview-grid">
-            <article className="overview-card">
-              <div className="card-label">Incidents</div>
-              <div className="card-placeholder">
-                {isLoadingIncidents ? '…' : incidents.length}
-              </div>
-              <p>Incidents loaded from the backend</p>
-            </article>
-
-            <article className="overview-card">
-              <div className="card-label">Investigations</div>
-              <div className="card-placeholder">—</div>
-              <p>AI investigation activity</p>
-            </article>
-
-            <article className="overview-card">
-              <div className="card-label">Knowledge sources</div>
-              <div className="card-placeholder">—</div>
-              <p>Runbooks and past incidents</p>
-            </article>
-          </div>
-
-          {isLoadingIncidents && (
-            <p className="page-description">Loading incidents...</p>
-          )}
-
-          {loadError && <p className="form-error">{loadError}</p>}
-
-          {!isLoadingIncidents && !loadError && incidents.length === 0 && (
-            <div className="section-heading">
-              <h2>No incidents yet</h2>
-              <span>Create an incident to get started</span>
-            </div>
-          )}
-
-          {incidents.length > 0 && (
-            <section className="incident-list-section">
-              <div className="section-heading">
-                <h2>Incidents</h2>
-                <span>
-                  {displayedIncidents.length} of {incidents.length} shown
+                <span
+                  className={`severity-badge severity-${selectedIncident.severity}`}
+                >
+                  {selectedIncident.severity}
                 </span>
               </div>
 
-              <div className="incident-filters">
-                <label>
-                  Status
-                  <select
-                    value={statusFilter}
-                    onChange={(event) =>
-                      setStatusFilter(
-                        event.target.value as IncidentStatusFilter,
-                      )
-                    }
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="open">Open</option>
-                    <option value="investigating">Investigating</option>
-                    <option value="resolved">Resolved</option>
-                  </select>
-                </label>
-
-                <label>
-                  Severity
-                  <select
-                    value={severityFilter}
-                    onChange={(event) =>
-                      setSeverityFilter(
-                        event.target.value as IncidentSeverityFilter,
-                      )
-                    }
-                  >
-                    <option value="all">All severities</option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </label>
-
-                <label>
-                  Environment
-                  <select
-                    value={environmentFilter}
-                    onChange={(event) =>
-                      setEnvironmentFilter(
-                        event.target.value as IncidentEnvironmentFilter,
-                      )
-                    }
-                  >
-                    <option value="all">All environments</option>
-                    <option value="production">Production</option>
-                    <option value="staging">Staging</option>
-                    <option value="development">Development</option>
-                  </select>
-                </label>
-
-                <label>
-                  Sort by
-                  <select
-                    value={sortOption}
-                    onChange={(event) =>
-                      setSortOption(event.target.value as IncidentSortOption)
-                    }
-                  >
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                    <option value="severity-high">
-                      Severity: highest first
-                    </option>
-                    <option value="severity-low">
-                      Severity: lowest first
-                    </option>
-                  </select>
-                </label>
+              <div className="welcome-panel">
+                <div>
+                  <h2>Incident overview</h2>
+                  <p>{selectedIncident.description}</p>
+                </div>
               </div>
 
-              <div className="incident-list">
-                {displayedIncidents.map((incident) => {
-                  const isUpdating = updatingIncidentIds.includes(incident.id)
+              <div className="overview-grid">
+                <article className="overview-card">
+                  <div className="card-label">Affected service</div>
+                  <div className="card-placeholder">
+                    {selectedIncident.service}
+                  </div>
+                </article>
 
-                  return (
-                    <article className="incident-card" key={incident.id}>
-                      <div className="incident-card-heading">
-                        <div>
-                          <span className="incident-id">
-                            INC-{String(incident.id).padStart(4, '0')}
-                          </span>
-                          <h3>{incident.title}</h3>
-                        </div>
+                <article className="overview-card">
+                  <div className="card-label">Environment</div>
+                  <div className="card-placeholder">
+                    {selectedIncident.environment ?? 'Unknown'}
+                  </div>
+                </article>
 
-                        <span
-                          className={`severity-badge severity-${incident.severity}`}
-                        >
-                          {incident.severity}
-                        </span>
-                      </div>
+                <article className="overview-card">
+                  <div className="card-label">Current status</div>
+                  <div className="card-placeholder">
+                    {selectedIncident.status}
+                  </div>
+                </article>
+              </div>
 
-                      <p className="incident-description">
-                        {incident.description}
-                      </p>
+              <div className="section-heading">
+                <h2>Investigation workspace</h2>
+                <span>Next: evidence and AI investigation</span>
+              </div>
+            </div>
+          ) : (
+            <>
 
-                      <div className="incident-meta">
-                        <span>Service: {incident.service}</span>
-
-                        <label className="incident-status-control">
-                          <span>Status:</span>
-                          <select
-                            value={incident.status}
-                            disabled={isUpdating}
-                            onChange={(event) =>
-                              handleStatusChange(
-                                incident.id,
-                                event.target.value as Incident['status'],
-                              )
-                            }
-                            aria-label={`Status for incident ${incident.id}`}
-                          >
-                            <option value="open">Open</option>
-                            <option value="investigating">
-                              Investigating
-                            </option>
-                            <option value="resolved">Resolved</option>
-                          </select>
-
-                          {isUpdating && (
-                            <span className="status-saving">Saving...</span>
-                          )}
-                        </label>
-
-                        <span>
-                          Environment: {incident.environment ?? 'Unknown'}
-                        </span>
-                      </div>
-
-                      {statusUpdateErrors[incident.id] && (
-                        <p className="status-update-error" role="alert">
-                          {statusUpdateErrors[incident.id]}
-                        </p>
-                      )}
-                    </article>
-                  )
-                })}
-
-                {displayedIncidents.length === 0 && (
+              <div className="page-heading">
+                <div>
+                  <p className="eyebrow">INCIDENT OPERATIONS</p>
+                  <h1>Good evening</h1>
                   <p className="page-description">
-                    No incidents match the selected filters.
+                    Investigate incidents with evidence, context, and AI-assisted
+                    insights.
                   </p>
-                )}
+                </div>
+
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    setError('')
+                    setIsFormOpen(true)
+                  }}
+                >
+                  + New incident
+                </button>
               </div>
-            </section>
+
+              <div className="welcome-panel">
+                <div className="welcome-icon" aria-hidden="true">
+                  ✦
+                </div>
+                <div>
+                  <h2>Your incident workspace</h2>
+                  <p>
+                    Your dashboard brings incidents, evidence, and investigation
+                    reports together in one place.
+                  </p>
+                </div>
+              </div>
+
+              <div className="section-heading">
+                <h2>Workspace overview</h2>
+                <span>Getting started</span>
+              </div>
+
+              <div className="overview-grid">
+                <article className="overview-card">
+                  <div className="card-label">Incidents</div>
+                  <div className="card-placeholder">
+                    {isLoadingIncidents ? '…' : incidents.length}
+                  </div>
+                  <p>Incidents loaded from the backend</p>
+                </article>
+
+                <article className="overview-card">
+                  <div className="card-label">Investigations</div>
+                  <div className="card-placeholder">—</div>
+                  <p>AI investigation activity</p>
+                </article>
+
+                <article className="overview-card">
+                  <div className="card-label">Knowledge sources</div>
+                  <div className="card-placeholder">—</div>
+                  <p>Runbooks and past incidents</p>
+                </article>
+              </div>
+
+              {isLoadingIncidents && (
+                <p className="page-description">Loading incidents...</p>
+              )}
+
+              {loadError && <p className="form-error">{loadError}</p>}
+
+              {!isLoadingIncidents && !loadError && incidents.length === 0 && (
+                <div className="section-heading">
+                  <h2>No incidents yet</h2>
+                  <span>Create an incident to get started</span>
+                </div>
+              )}
+
+              {incidents.length > 0 && (
+                <section className="incident-list-section">
+                  <div className="section-heading">
+                    <h2>Incidents</h2>
+                    <span>
+                      {displayedIncidents.length} of {incidents.length} shown
+                    </span>
+                  </div>
+
+                  <div className="incident-filters">
+                    <label>
+                      Status
+                      <select
+                        value={statusFilter}
+                        onChange={(event) =>
+                          setStatusFilter(
+                            event.target.value as IncidentStatusFilter,
+                          )
+                        }
+                      >
+                        <option value="all">All statuses</option>
+                        <option value="open">Open</option>
+                        <option value="investigating">Investigating</option>
+                        <option value="resolved">Resolved</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Severity
+                      <select
+                        value={severityFilter}
+                        onChange={(event) =>
+                          setSeverityFilter(
+                            event.target.value as IncidentSeverityFilter,
+                          )
+                        }
+                      >
+                        <option value="all">All severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Environment
+                      <select
+                        value={environmentFilter}
+                        onChange={(event) =>
+                          setEnvironmentFilter(
+                            event.target.value as IncidentEnvironmentFilter,
+                          )
+                        }
+                      >
+                        <option value="all">All environments</option>
+                        <option value="production">Production</option>
+                        <option value="staging">Staging</option>
+                        <option value="development">Development</option>
+                      </select>
+                    </label>
+
+                    <label>
+                      Sort by
+                      <select
+                        value={sortOption}
+                        onChange={(event) =>
+                          setSortOption(event.target.value as IncidentSortOption)
+                        }
+                      >
+                        <option value="newest">Newest first</option>
+                        <option value="oldest">Oldest first</option>
+                        <option value="severity-high">
+                          Severity: highest first
+                        </option>
+                        <option value="severity-low">
+                          Severity: lowest first
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="incident-list">
+                    {displayedIncidents.map((incident) => {
+                      const isUpdating = updatingIncidentIds.includes(incident.id)
+
+                      return (
+                        <article
+                          className="incident-card"
+                          key={incident.id}
+                          onClick={() => setSelectedIncidentId(incident.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setSelectedIncidentId(incident.id)
+                            }
+                          }}
+                        >
+                          <div className="incident-card-heading">
+                            <div>
+                              <span className="incident-id">
+                                INC-{String(incident.id).padStart(4, '0')}
+                              </span>
+                              <h3>{incident.title}</h3>
+                            </div>
+
+                            <span
+                              className={`severity-badge severity-${incident.severity}`}
+                            >
+                              {incident.severity}
+                            </span>
+                          </div>
+
+                          <p className="incident-description">
+                            {incident.description}
+                          </p>
+
+                          <div className="incident-meta">
+                            <span>Service: {incident.service}</span>
+
+                            <label className="incident-status-control">
+                              <span>Status:</span>
+                              <select
+                                value={incident.status}
+                                disabled={isUpdating}
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                onChange={(event) =>
+                                  handleStatusChange(
+                                    incident.id,
+                                    event.target.value as Incident['status'],
+                                  )
+                                }
+                                aria-label={`Status for incident ${incident.id}`}
+                              >
+                                <option value="open">Open</option>
+                                <option value="investigating">
+                                  Investigating
+                                </option>
+                                <option value="resolved">Resolved</option>
+                              </select>
+
+                              {isUpdating && (
+                                <span className="status-saving">Saving...</span>
+                              )}
+                            </label>
+
+                            <span>
+                              Environment: {incident.environment ?? 'Unknown'}
+                            </span>
+                          </div>
+
+                          {statusUpdateErrors[incident.id] && (
+                            <p className="status-update-error" role="alert">
+                              {statusUpdateErrors[incident.id]}
+                            </p>
+                          )}
+                        </article>
+                      )
+                    })}
+
+                    {displayedIncidents.length === 0 && (
+                      <p className="page-description">
+                        No incidents match the selected filters.
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+            </>
           )}
         </section>
-      </main>
+      </main >
 
       {isFormOpen && (
         <div className="modal-backdrop" onClick={closeForm}>
@@ -701,8 +787,9 @@ function App() {
             </form>
           </section>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   )
 }
 

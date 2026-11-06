@@ -698,3 +698,35 @@
   color: #b42318;
   font-size: 12px;
 }
+
+/* Incident details workspace */
+.incident-details {
+  width: 100%;
+}
+
+.incident-details > .secondary-button {
+  margin-bottom: 24px;
+}
+
+.incident-details .page-heading {
+  align-items: flex-start;
+}
+
+.incident-details .welcome-panel {
+  min-height: 110px;
+}
+
+.incident-details .overview-card {
+  min-height: 110px;
+}
+
+.incident-details .card-placeholder {
+  overflow-wrap: anywhere;
+  font-size: 17px;
+  line-height: 1.5;
+  text-transform: capitalize;
+}
+
+.incident-details .section-heading {
+  margin-top: 32px;
+}
