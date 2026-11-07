@@ -9,13 +9,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-
 from app.ai_models import AIInvestigationResult
 from app.analyzer import analyze_evidence
 from app.config import get_allowed_origins
 from app.database import get_db
 from app.db_models import IncidentEvidence, IncidentRecord
 from app.investigation_service import run_ai_investigation
+from openai import RateLimitError
+
 from app.llm_client import LLMConfigurationError
 from app.models import (
     EvidenceAnalysisResponse,
@@ -414,12 +415,36 @@ def investigate_incident(
         )
     )
     evidence = list(db.scalars(statement).all())
-
     try:
         return run_ai_investigation(
             incident=incident,
             evidence=evidence,
         )
+    except RateLimitError as exc:
+        error_body = exc.body
+        error_details = (
+            error_body.get("error", {})
+            if isinstance(error_body, dict)
+            else {}
+        )
+        error_code = error_details.get("code")
+
+        if error_code == "insufficient_quota":
+            detail = (
+                "AI investigation is unavailable because the OpenAI API "
+                "account has no remaining credits. Check API billing."
+            )
+        else:
+            detail = (
+                "The AI provider is temporarily rate-limiting requests. "
+                "Please try again shortly."
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
+        ) from exc
+
     except LLMConfigurationError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -430,6 +455,7 @@ def investigate_incident(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="AI investigation returned invalid evidence references",
         )
+
 @app.get(
     "/incidents/{incident_id}/analyze",
     response_model=EvidenceAnalysisResponse,

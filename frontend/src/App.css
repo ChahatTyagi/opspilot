@@ -848,3 +848,100 @@
   color: #777d8c;
   font-size: 12px;
 }
+
+/* AI Investigation workspace */
+
+.investigation-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 24px;
+}
+
+.investigation-results {
+  margin-top: 28px;
+  padding: 24px;
+  border: 1px solid #e8eaf2;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.investigation-results > .section-heading {
+  margin-top: 0;
+  margin-bottom: 24px;
+}
+
+.investigation-result-group {
+  margin-top: 24px;
+}
+
+.investigation-result-group h3 {
+  margin: 0 0 14px;
+  color: #344054;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.investigation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.investigation-result-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #e8eaf2;
+  border-radius: 9px;
+  background: #fafbff;
+}
+
+.investigation-result-card p {
+  margin: 0;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.investigation-result-card span {
+  color: #7b8496;
+  font-size: 11px;
+}
+
+.confidence-badge {
+  padding: 5px 9px;
+  border-radius: 20px;
+  font-size: 10px !important;
+  font-weight: 700;
+}
+
+.confidence-low {
+  background: #fff7ed;
+  color: #c2410c !important;
+}
+
+.confidence-medium {
+  background: #eff6ff;
+  color: #1d4ed8 !important;
+}
+
+.confidence-high {
+  background: #ecfdf5;
+  color: #047857 !important;
+}
+
+.investigation-result-group ul {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 22px;
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.investigation-result-group .empty-state {
+  font-size: 13px;
+}

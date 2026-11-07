@@ -42,6 +42,25 @@ type EvidenceForm = {
   source_type: EvidenceSourceType
   content: string
 }
+type AIConfidence = 'low' | 'medium' | 'high'
+
+type AIFact = {
+  statement: string
+  evidence_ids: number[]
+}
+
+type AIHypothesis = {
+  explanation: string
+  supporting_evidence_ids: number[]
+  confidence: AIConfidence
+}
+
+type AIInvestigationResult = {
+  observed_facts: AIFact[]
+  hypotheses: AIHypothesis[]
+  recommended_checks: string[]
+  unknowns: string[]
+}
 
 type IncidentStatusFilter = 'all' | Incident['status']
 type IncidentSeverityFilter = 'all' | Incident['severity']
@@ -105,6 +124,13 @@ function App() {
 
   const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false)
   const [evidenceSubmitError, setEvidenceSubmitError] = useState('')
+  // AI investigation state
+  const [investigationResult, setInvestigationResult] =
+    useState<AIInvestigationResult | null>(null)
+
+  const [isInvestigating, setIsInvestigating] = useState(false)
+
+  const [investigationError, setInvestigationError] = useState('')
 
   // Incident form state
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -284,56 +310,54 @@ function App() {
   }
 
 
-  useEffect(() => {
-    if (selectedIncidentId === null) {
-      setEvidence([])
-      setEvidenceLoadError('')
-      setIsLoadingEvidence(false)
+  async function handleInvestigation() {
+    if (selectedIncidentId === null || isInvestigating) {
       return
     }
 
-    let isActive = true
+    setIsInvestigating(true)
+    setInvestigationError('')
+    setInvestigationResult(null)
 
-    async function loadEvidence() {
-      setEvidence([])
-      setEvidenceLoadError('')
-      setIsLoadingEvidence(true)
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/incidents/${selectedIncidentId}/investigate`,
+        {
+          method: 'POST',
+        },
+      )
 
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/incidents/${selectedIncidentId}/evidence?limit=50&offset=0`,
-        )
+      if (!response.ok) {
+        let message = 'Unable to investigate this incident. Please try again.'
 
-        if (!response.ok) {
-          throw new Error('Unable to load evidence. Please try again.')
+        try {
+          const errorData = await response.json()
+
+          if (typeof errorData.detail === 'string') {
+            message = errorData.detail
+          }
+        } catch {
+          // Keep the default error message if the response is not JSON.
         }
 
-        const loadedEvidence: IncidentEvidence[] = await response.json()
-
-        if (isActive) {
-          setEvidence(loadedEvidence)
-        }
-      } catch (error) {
-        if (isActive) {
-          setEvidenceLoadError(
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred while loading evidence.',
-          )
-        }
-      } finally {
-        if (isActive) {
-          setIsLoadingEvidence(false)
-        }
+        throw new Error(message)
       }
-    }
 
-    loadEvidence()
+      const result: AIInvestigationResult = await response.json()
 
-    return () => {
-      isActive = false
+      setInvestigationResult(result)
+    } catch (error) {
+      setInvestigationError(
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred during investigation.',
+      )
+    } finally {
+      setIsInvestigating(false)
     }
-  }, [selectedIncidentId])
+  }
+
+
 
   const filteredIncidents = incidents.filter((incident) => {
     const matchesStatus =
@@ -602,67 +626,67 @@ function App() {
                 </article>
               </div>
               <div className="section-heading">
-  <h2>Add evidence</h2>
-  <span>Attach information to this incident</span>
-</div>
+                <h2>Add evidence</h2>
+                <span>Attach information to this incident</span>
+              </div>
 
-<form className="evidence-form" onSubmit={handleEvidenceSubmit}>
-  <div className="form-group">
-    <label htmlFor="evidence-source-type">Evidence type</label>
+              <form className="evidence-form" onSubmit={handleEvidenceSubmit}>
+                <div className="form-group">
+                  <label htmlFor="evidence-source-type">Evidence type</label>
 
-    <select
-      id="evidence-source-type"
-      value={evidenceForm.source_type}
-      onChange={(event) =>
-        setEvidenceForm((current) => ({
-          ...current,
-          source_type: event.target.value as EvidenceSourceType,
-        }))
-      }
-    >
-      <option value="log">Log</option>
-      <option value="metric">Metric</option>
-      <option value="trace">Trace</option>
-      <option value="deployment">Deployment</option>
-      <option value="note">Note</option>
-    </select>
-  </div>
+                  <select
+                    id="evidence-source-type"
+                    value={evidenceForm.source_type}
+                    onChange={(event) =>
+                      setEvidenceForm((current) => ({
+                        ...current,
+                        source_type: event.target.value as EvidenceSourceType,
+                      }))
+                    }
+                  >
+                    <option value="log">Log</option>
+                    <option value="metric">Metric</option>
+                    <option value="trace">Trace</option>
+                    <option value="deployment">Deployment</option>
+                    <option value="note">Note</option>
+                  </select>
+                </div>
 
-  <div className="form-group">
-    <label htmlFor="evidence-content">Evidence content</label>
+                <div className="form-group">
+                  <label htmlFor="evidence-content">Evidence content</label>
 
-    <textarea
-      id="evidence-content"
-      value={evidenceForm.content}
-      onChange={(event) =>
-        setEvidenceForm((current) => ({
-          ...current,
-          content: event.target.value,
-        }))
-      }
-      placeholder="Paste logs, metrics, traces, deployment details, or investigation notes..."
-      rows={5}
-      maxLength={20000}
-      required
-    />
+                  <textarea
+                    id="evidence-content"
+                    value={evidenceForm.content}
+                    onChange={(event) =>
+                      setEvidenceForm((current) => ({
+                        ...current,
+                        content: event.target.value,
+                      }))
+                    }
+                    placeholder="Paste logs, metrics, traces, deployment details, or investigation notes..."
+                    rows={5}
+                    maxLength={20000}
+                    required
+                  />
 
-    <span className="character-count">
-      {evidenceForm.content.length}/20000 characters
-    </span>
-  </div>
+                  <span className="character-count">
+                    {evidenceForm.content.length}/20000 characters
+                  </span>
+                </div>
 
-  {evidenceSubmitError && (
-    <p className="error-message">{evidenceSubmitError}</p>
-  )}
+                {evidenceSubmitError && (
+                  <p className="error-message">{evidenceSubmitError}</p>
+                )}
 
-  <button
-    type="submit"
-    className="primary-button"
-    disabled={isSubmittingEvidence || !evidenceForm.content.trim()}
-  >
-    {isSubmittingEvidence ? 'Adding evidence...' : 'Add evidence'}
-  </button>
-</form>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isSubmittingEvidence || !evidenceForm.content.trim()}
+                >
+                  {isSubmittingEvidence ? 'Adding evidence...' : 'Add evidence'}
+                </button>
+              </form>
 
               <div className="section-heading">
                 <h2>Evidence</h2>
@@ -705,6 +729,118 @@ function App() {
                   </div>
                 )}
               </section>
+              <div className="investigation-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleInvestigation}
+                  disabled={isInvestigating || isLoadingEvidence}
+                >
+                  {isInvestigating
+                    ? 'Investigating...'
+                    : 'Run AI Investigation'}
+                </button>
+              </div>
+
+              {investigationError && (
+                <p className="error-message">
+                  {investigationError}
+                </p>
+              )}
+              {investigationResult && (
+                <section className="investigation-results">
+                  <div className="section-heading">
+                    <h2>AI Investigation Results</h2>
+                    <span>Evidence-based analysis</span>
+                  </div>
+
+                  {/* Observed facts */}
+                  <div className="investigation-result-group">
+                    <h3>Observed Facts</h3>
+
+                    {investigationResult.observed_facts.length === 0 ? (
+                      <p className="empty-state">No confirmed facts identified.</p>
+                    ) : (
+                      <div className="investigation-list">
+                        {investigationResult.observed_facts.map((fact, index) => (
+                          <article
+                            className="investigation-result-card"
+                            key={`${fact.statement}-${index}`}
+                          >
+                            <p>{fact.statement}</p>
+                            <span>
+                              Evidence IDs: {fact.evidence_ids.join(', ')}
+                            </span>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hypotheses */}
+                  <div className="investigation-result-group">
+                    <h3>Possible Causes</h3>
+
+                    {investigationResult.hypotheses.length === 0 ? (
+                      <p className="empty-state">No hypotheses generated.</p>
+                    ) : (
+                      <div className="investigation-list">
+                        {investigationResult.hypotheses.map((hypothesis, index) => (
+                          <article
+                            className="investigation-result-card"
+                            key={`${hypothesis.explanation}-${index}`}
+                          >
+                            <p>{hypothesis.explanation}</p>
+
+                            <span
+                              className={`confidence-badge confidence-${hypothesis.confidence}`}
+                            >
+                              {hypothesis.confidence.toUpperCase()} confidence
+                            </span>
+
+                            <span>
+                              Supporting evidence IDs:{' '}
+                              {hypothesis.supporting_evidence_ids.length > 0
+                                ? hypothesis.supporting_evidence_ids.join(', ')
+                                : 'None'}
+                            </span>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recommended checks */}
+                  <div className="investigation-result-group">
+                    <h3>Recommended Checks</h3>
+
+                    {investigationResult.recommended_checks.length === 0 ? (
+                      <p className="empty-state">No additional checks recommended.</p>
+                    ) : (
+                      <ul>
+                        {investigationResult.recommended_checks.map((check, index) => (
+                          <li key={`${check}-${index}`}>{check}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Unknowns */}
+                  <div className="investigation-result-group">
+                    <h3>Unknowns and Evidence Gaps</h3>
+
+                    {investigationResult.unknowns.length === 0 ? (
+                      <p className="empty-state">No additional unknowns reported.</p>
+                    ) : (
+                      <ul>
+                        {investigationResult.unknowns.map((unknown, index) => (
+                          <li key={`${unknown}-${index}`}>{unknown}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </section>
+              )}
             </div>
           ) : (
             <>

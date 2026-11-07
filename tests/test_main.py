@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from unittest.mock import patch
-
+from openai import RateLimitError
 from app.database import Base, get_db
 from app.db_models import IncidentEvidence, IncidentRecord
 from app.main import app
@@ -486,8 +486,6 @@ def test_invalid_request_id_is_replaced():
         returned_id,
     )
 
-
-from unittest.mock import patch
 
 import pytest
 
@@ -1163,4 +1161,66 @@ def test_run_ai_investigation_endpoint_invalid_evidence(
     assert response.status_code == 422
     assert response.json()["detail"] == (
         "AI investigation returned invalid evidence references"
+    )
+
+def test_run_ai_investigation_endpoint_handles_exhausted_api_quota(
+    monkeypatch,
+):
+    from openai._base_client import httpx2
+
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Payment service outage",
+            "description": "Payment requests are failing.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    request = httpx2.Request(
+        "POST",
+        "https://api.openai.com/v1/responses",
+    )
+    response = httpx2.Response(
+        status_code=429,
+        request=request,
+        json={
+            "error": {
+                "message": "You have no credits remaining.",
+                "type": "insufficient_quota",
+                "code": "insufficient_quota",
+            }
+        },
+    )
+
+    quota_error = RateLimitError(
+        "You have no credits remaining.",
+        response=response,
+        body={
+            "error": {
+                "message": "You have no credits remaining.",
+                "type": "insufficient_quota",
+                "code": "insufficient_quota",
+            }
+        },
+    )
+
+    def fake_investigation(**kwargs):
+        raise quota_error
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        fake_investigation,
+    )
+
+    result = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert result.status_code == 503
+    assert result.json()["detail"] == (
+        "AI investigation is unavailable because the OpenAI API "
+        "account has no remaining credits. Check API billing."
     )
