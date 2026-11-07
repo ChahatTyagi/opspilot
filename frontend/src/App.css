@@ -730,3 +730,121 @@
 .incident-details .section-heading {
   margin-top: 32px;
 }
+
+/* Evidence workspace */
+
+.evidence-section {
+  margin-top: 16px;
+}
+
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.evidence-card {
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #e8eaf0;
+  border-radius: 12px;
+}
+
+.evidence-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.evidence-source-type {
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: #eef0ff;
+  color: #5145cd;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.evidence-date {
+  color: #777d8c;
+  font-size: 12px;
+}
+
+.evidence-content {
+  margin: 0;
+  color: #343847;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.empty-state {
+  padding: 24px;
+  color: #777d8c;
+  background: #ffffff;
+  border: 1px dashed #d9dce5;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.error-message {
+  color: #c0392b;
+  font-size: 14px;
+}
+
+/* Evidence submission form */
+
+.evidence-form {
+  margin-bottom: 32px;
+  padding: 22px;
+  background: #ffffff;
+  border: 1px solid #e8eaf0;
+  border-radius: 12px;
+}
+
+.evidence-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.evidence-form label {
+  color: #343847;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.evidence-form select,
+.evidence-form textarea {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid #dfe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #343847;
+  font: inherit;
+  font-size: 14px;
+}
+
+.evidence-form textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.evidence-form select:focus,
+.evidence-form textarea:focus {
+  outline: none;
+  border-color: #635bdb;
+  box-shadow: 0 0 0 3px rgba(99, 91, 219, 0.1);
+}
+
+.character-count {
+  align-self: flex-end;
+  color: #777d8c;
+  font-size: 12px;
+}

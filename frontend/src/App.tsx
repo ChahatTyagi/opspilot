@@ -24,6 +24,24 @@ type IncidentForm = {
   environment: '' | 'production' | 'staging' | 'development'
   severity: 'low' | 'medium' | 'high' | 'critical'
 }
+type EvidenceSourceType =
+  | 'log'
+  | 'metric'
+  | 'trace'
+  | 'deployment'
+  | 'note'
+
+type IncidentEvidence = {
+  id: number
+  incident_id: number
+  source_type: EvidenceSourceType
+  content: string
+  created_at: string
+}
+type EvidenceForm = {
+  source_type: EvidenceSourceType
+  content: string
+}
 
 type IncidentStatusFilter = 'all' | Incident['status']
 type IncidentSeverityFilter = 'all' | Incident['severity']
@@ -50,6 +68,10 @@ const emptyForm: IncidentForm = {
   environment: '',
   severity: 'medium',
 }
+const emptyEvidenceForm: EvidenceForm = {
+  source_type: 'log',
+  content: '',
+}
 
 const severityRank: Record<Incident['severity'], number> = {
   critical: 4,
@@ -62,12 +84,29 @@ function App() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [form, setForm] = useState<IncidentForm>(emptyForm)
   const [incidents, setIncidents] = useState<Incident[]>([])
+
   const [selectedIncidentId, setSelectedIncidentId] =
     useState<number | null>(null)
+
   const selectedIncident =
     incidents.find((incident) => incident.id === selectedIncidentId) ?? null
+
   const [isLoadingIncidents, setIsLoadingIncidents] = useState(true)
   const [loadError, setLoadError] = useState('')
+
+  // Evidence state
+  const [evidence, setEvidence] = useState<IncidentEvidence[]>([])
+  const [isLoadingEvidence, setIsLoadingEvidence] = useState(false)
+  const [evidenceLoadError, setEvidenceLoadError] = useState('')
+
+  // Evidence form state
+  const [evidenceForm, setEvidenceForm] =
+    useState<EvidenceForm>(emptyEvidenceForm)
+
+  const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false)
+  const [evidenceSubmitError, setEvidenceSubmitError] = useState('')
+
+  // Incident form state
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -76,15 +115,20 @@ function App() {
     Record<number, string>
   >({})
 
+  // Filters
   const [statusFilter, setStatusFilter] =
     useState<IncidentStatusFilter>('all')
+
   const [severityFilter, setSeverityFilter] =
     useState<IncidentSeverityFilter>('all')
+
   const [environmentFilter, setEnvironmentFilter] =
     useState<IncidentEnvironmentFilter>('all')
+
   const [sortOption, setSortOption] =
     useState<IncidentSortOption>('newest')
 
+  // Effect 1: Load incidents
   useEffect(() => {
     let isActive = true
 
@@ -125,6 +169,171 @@ function App() {
       isActive = false
     }
   }, [])
+
+  // Effect 2: Load evidence whenever selected incident changes
+  useEffect(() => {
+    if (selectedIncidentId === null) {
+      setEvidence([])
+      setEvidenceLoadError('')
+      setIsLoadingEvidence(false)
+      return
+    }
+
+    let isActive = true
+
+    async function loadEvidence() {
+      setEvidence([])
+      setEvidenceLoadError('')
+      setIsLoadingEvidence(true)
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/incidents/${selectedIncidentId}/evidence?limit=50&offset=0`,
+        )
+
+        if (!response.ok) {
+          throw new Error('Unable to load evidence. Please try again.')
+        }
+
+        const loadedEvidence: IncidentEvidence[] = await response.json()
+
+        if (isActive) {
+          setEvidence(loadedEvidence)
+        }
+      } catch (loadError) {
+        if (isActive) {
+          setEvidenceLoadError(
+            loadError instanceof Error
+              ? loadError.message
+              : 'An unexpected error occurred while loading evidence.',
+          )
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingEvidence(false)
+        }
+      }
+    }
+
+    loadEvidence()
+
+    return () => {
+      isActive = false
+    }
+  }, [selectedIncidentId])
+
+  // Handler: Submit new evidence
+  async function handleEvidenceSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+
+    if (selectedIncidentId === null) {
+      return
+    }
+
+    setIsSubmittingEvidence(true)
+    setEvidenceSubmitError('')
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/incidents/${selectedIncidentId}/evidence`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(evidenceForm),
+        },
+      )
+
+      if (!response.ok) {
+        let message = 'Unable to add evidence. Please try again.'
+
+        try {
+          const errorData = await response.json()
+
+          if (typeof errorData.detail === 'string') {
+            message = errorData.detail
+          }
+        } catch {
+          // Keep the default error message.
+        }
+
+        throw new Error(message)
+      }
+
+      const createdEvidence: IncidentEvidence = await response.json()
+
+      setEvidence((currentEvidence) => [
+        ...currentEvidence,
+        createdEvidence,
+      ])
+
+      setEvidenceForm(emptyEvidenceForm)
+      setEvidenceSubmitError('')
+    } catch (error) {
+      setEvidenceSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred while adding evidence.',
+      )
+    } finally {
+      setIsSubmittingEvidence(false)
+    }
+  }
+
+
+  useEffect(() => {
+    if (selectedIncidentId === null) {
+      setEvidence([])
+      setEvidenceLoadError('')
+      setIsLoadingEvidence(false)
+      return
+    }
+
+    let isActive = true
+
+    async function loadEvidence() {
+      setEvidence([])
+      setEvidenceLoadError('')
+      setIsLoadingEvidence(true)
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/incidents/${selectedIncidentId}/evidence?limit=50&offset=0`,
+        )
+
+        if (!response.ok) {
+          throw new Error('Unable to load evidence. Please try again.')
+        }
+
+        const loadedEvidence: IncidentEvidence[] = await response.json()
+
+        if (isActive) {
+          setEvidence(loadedEvidence)
+        }
+      } catch (error) {
+        if (isActive) {
+          setEvidenceLoadError(
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred while loading evidence.',
+          )
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingEvidence(false)
+        }
+      }
+    }
+
+    loadEvidence()
+
+    return () => {
+      isActive = false
+    }
+  }, [selectedIncidentId])
 
   const filteredIncidents = incidents.filter((incident) => {
     const matchesStatus =
@@ -392,11 +601,110 @@ function App() {
                   </div>
                 </article>
               </div>
+              <div className="section-heading">
+  <h2>Add evidence</h2>
+  <span>Attach information to this incident</span>
+</div>
+
+<form className="evidence-form" onSubmit={handleEvidenceSubmit}>
+  <div className="form-group">
+    <label htmlFor="evidence-source-type">Evidence type</label>
+
+    <select
+      id="evidence-source-type"
+      value={evidenceForm.source_type}
+      onChange={(event) =>
+        setEvidenceForm((current) => ({
+          ...current,
+          source_type: event.target.value as EvidenceSourceType,
+        }))
+      }
+    >
+      <option value="log">Log</option>
+      <option value="metric">Metric</option>
+      <option value="trace">Trace</option>
+      <option value="deployment">Deployment</option>
+      <option value="note">Note</option>
+    </select>
+  </div>
+
+  <div className="form-group">
+    <label htmlFor="evidence-content">Evidence content</label>
+
+    <textarea
+      id="evidence-content"
+      value={evidenceForm.content}
+      onChange={(event) =>
+        setEvidenceForm((current) => ({
+          ...current,
+          content: event.target.value,
+        }))
+      }
+      placeholder="Paste logs, metrics, traces, deployment details, or investigation notes..."
+      rows={5}
+      maxLength={20000}
+      required
+    />
+
+    <span className="character-count">
+      {evidenceForm.content.length}/20000 characters
+    </span>
+  </div>
+
+  {evidenceSubmitError && (
+    <p className="error-message">{evidenceSubmitError}</p>
+  )}
+
+  <button
+    type="submit"
+    className="primary-button"
+    disabled={isSubmittingEvidence || !evidenceForm.content.trim()}
+  >
+    {isSubmittingEvidence ? 'Adding evidence...' : 'Add evidence'}
+  </button>
+</form>
 
               <div className="section-heading">
-                <h2>Investigation workspace</h2>
-                <span>Next: evidence and AI investigation</span>
+                <h2>Evidence</h2>
+                <span>{evidence.length} records loaded</span>
               </div>
+
+              <section className="evidence-section">
+                {isLoadingEvidence ? (
+                  <p className="empty-state">Loading evidence...</p>
+                ) : evidenceLoadError ? (
+                  <p className="error-message">{evidenceLoadError}</p>
+                ) : evidence.length === 0 ? (
+                  <p className="empty-state">
+                    No evidence has been added to this incident yet.
+                  </p>
+                ) : (
+                  <div className="evidence-list">
+                    {evidence.map((item) => (
+                      <article className="evidence-card" key={item.id}>
+                        <div className="evidence-card-header">
+                          <span className="evidence-source-type">
+                            {item.source_type}
+                          </span>
+                          <span className="evidence-date">
+                            {new Date(item.created_at).toLocaleString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true,
+                            })}
+
+                          </span>
+                        </div>
+
+                        <p className="evidence-content">{item.content}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
           ) : (
             <>
