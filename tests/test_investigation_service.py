@@ -12,7 +12,12 @@ from app.ai_models import (
     AIInvestigationResult,
 )
 from app.investigation_service import run_ai_investigation
-
+@pytest.fixture(autouse=True)
+def use_openai_provider_by_default(monkeypatch):
+    monkeypatch.setattr(
+        "app.investigation_service.get_llm_provider",
+        lambda: "openai",
+    )
 
 def make_incident():
     return SimpleNamespace(
@@ -249,4 +254,78 @@ def test_run_ai_investigation_rejects_evidence_not_returned_by_search(
         run_ai_investigation(
             incident=make_incident(),
             evidence=evidence,
+        )
+
+
+def test_run_ai_investigation_uses_ollama_when_configured(monkeypatch):
+    expected_result = make_result()
+    mock_client = Mock()
+    captured = {}
+
+    monkeypatch.setattr(
+        "app.investigation_service.get_llm_provider",
+        lambda: "ollama",
+    )
+
+    def fake_ollama_generator(
+        *,
+        incident_context,
+        executor,
+        client,
+    ):
+        captured["context"] = json.loads(incident_context)
+        captured["executor"] = executor
+        captured["client"] = client
+        return expected_result
+
+    ollama_generator = Mock(side_effect=fake_ollama_generator)
+
+    monkeypatch.setattr(
+        "app.investigation_service.generate_ollama_investigation_with_tools",
+        ollama_generator,
+    )
+
+    result = run_ai_investigation(
+        incident=make_incident(),
+        evidence=[make_evidence()],
+        client=mock_client,
+    )
+
+    assert result is expected_result
+    assert captured["context"]["incident"]["id"] == 42
+    assert captured["executor"].incident_id == 42
+    assert captured["client"] is mock_client
+    ollama_generator.assert_called_once()
+
+
+def test_run_ai_investigation_validates_ollama_evidence_references(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.investigation_service.get_llm_provider",
+        lambda: "ollama",
+    )
+
+    monkeypatch.setattr(
+        "app.investigation_service.generate_ollama_investigation_with_tools",
+        lambda **kwargs: make_result(evidence_ids=[999]),
+    )
+
+    with pytest.raises(ValueError, match="999"):
+        run_ai_investigation(
+            incident=make_incident(),
+            evidence=[make_evidence(evidence_id=10)],
+        )
+
+
+def test_run_ai_investigation_rejects_unsupported_provider(monkeypatch):
+    monkeypatch.setattr(
+        "app.investigation_service.get_llm_provider",
+        lambda: "unsupported-provider",
+    )
+
+    with pytest.raises(ValueError, match="Unsupported LLM provider"):
+        run_ai_investigation(
+            incident=make_incident(),
+            evidence=[make_evidence()],
         )

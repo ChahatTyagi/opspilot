@@ -5,9 +5,14 @@ from typing import Any, Sequence
 from openai import OpenAI
 
 from app.ai_models import AIInvestigationResult
+from app.config import get_llm_provider
 from app.evidence_validation import validate_evidence_references
 from app.incident_context import build_incident_context
 from app.llm_client import generate_investigation_with_tools
+from app.ollama_client import OllamaClient
+from app.ollama_investigation import (
+    generate_ollama_investigation_with_tools,
+)
 from app.tool_executor import InvestigationToolExecutor
 
 
@@ -15,9 +20,9 @@ def run_ai_investigation(
     *,
     incident: Any,
     evidence: Sequence[Any],
-    client: OpenAI | None = None,
+    client: OpenAI | OllamaClient | None = None,
 ) -> AIInvestigationResult:
-    """Build bounded context, run tool-assisted investigation, and validate citations."""
+    """Run an evidence-grounded investigation using the configured LLM."""
 
     # Reject cross-incident evidence before creating context or tools.
     for item in evidence:
@@ -41,11 +46,28 @@ def run_ai_investigation(
         evidence_items=evidence,
     )
 
-    result = generate_investigation_with_tools(
-        incident_context=incident_context,
-        executor=executor,
-        client=client,
-    )
+    # Select the configured LLM provider.
+    provider = get_llm_provider()
+
+    if provider == "openai":
+        result = generate_investigation_with_tools(
+            incident_context=incident_context,
+            executor=executor,
+            client=client,
+        )
+
+    elif provider == "ollama":
+        result = generate_ollama_investigation_with_tools(
+            incident_context=incident_context,
+            executor=executor,
+            client=client,
+        )
+
+    else:
+        raise ValueError(
+            f"Unsupported LLM provider: {provider}. "
+            "Supported providers are 'openai' and 'ollama'."
+        )
 
     # Add only evidence IDs actually returned by successful tool searches.
     valid_evidence_ids.update(executor.returned_evidence_ids)

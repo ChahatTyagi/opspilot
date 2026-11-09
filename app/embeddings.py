@@ -1,7 +1,4 @@
 
-from sentence_transformers import SentenceTransformer
-
-
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
@@ -15,7 +12,10 @@ class LocalEmbedder:
     def _get_model(self):
         """Load the model only when the first embedding is requested."""
         if self._model is None:
+            from sentence_transformers import SentenceTransformer
+
             self._model = SentenceTransformer(self.model_name)
+
         return self._model
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
