@@ -70,3 +70,43 @@ def test_rejects_multiple_invalid_references():
             result,
             valid_evidence_ids={10, 11, 12},
         )
+
+
+def test_rejects_exact_duplicate_hypotheses():
+    result = make_result()
+
+    result.hypotheses.append(
+        AIHypothesis(
+            explanation=(
+                "The errors may relate to connection saturation."
+            ),
+            supporting_evidence_ids=[11],
+            confidence=AIConfidence.MEDIUM,
+        )
+    )
+
+    with pytest.raises(ValueError, match="duplicate hypothesis"):
+        validate_evidence_references(
+            result,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_rejects_duplicate_hypotheses_with_different_case_and_spacing():
+    result = make_result()
+
+    result.hypotheses.append(
+        AIHypothesis(
+            explanation=(
+                "  THE ERRORS MAY RELATE TO CONNECTION SATURATION.  "
+            ),
+            supporting_evidence_ids=[11],
+            confidence=AIConfidence.MEDIUM,
+        )
+    )
+
+    with pytest.raises(ValueError, match="duplicate hypothesis"):
+        validate_evidence_references(
+            result,
+            valid_evidence_ids={10, 11, 12},
+        )

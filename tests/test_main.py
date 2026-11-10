@@ -10,6 +10,8 @@ from openai import RateLimitError
 from app.database import Base, get_db
 from app.db_models import IncidentEvidence, IncidentRecord
 from app.main import app
+from app.ollama_client import OllamaRequestError
+from app.investigation_service import UnsupportedLLMProviderError
 test_engine = create_engine(
     "sqlite://",
     connect_args={"check_same_thread": False},
@@ -567,7 +569,7 @@ def test_update_incident_rolls_back_on_commit_failure(monkeypatch):
     assert fetched.status_code == 200
     assert fetched.json()["status"] == "open"
 
-    
+
 def test_get_db_closes_session():
     db_generator = get_db()
     db = next(db_generator)
@@ -1162,6 +1164,79 @@ def test_run_ai_investigation_endpoint_invalid_evidence(
     assert response.json()["detail"] == (
         "AI investigation returned invalid evidence references"
     )
+
+
+def test_run_ai_investigation_endpoint_handles_ollama_failure(
+    monkeypatch,
+):
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Ollama provider failure",
+            "description": "The AI provider is unavailable.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    def fake_investigation(**kwargs):
+        raise OllamaRequestError(
+            "Internal connection details must not be exposed"
+        )
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        fake_investigation,
+    )
+
+    response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "AI investigation provider is unavailable"
+    )
+    assert "Internal connection details" not in response.text
+
+
+def test_run_ai_investigation_endpoint_handles_unsupported_provider(
+    monkeypatch,
+):
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Unsupported provider",
+            "description": "The configured AI provider is unsupported.",
+            "service": "checkout",
+            "severity": "medium",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    def fake_investigation(**kwargs):
+        raise UnsupportedLLMProviderError(
+            "Unsupported LLM provider: secret-provider-name"
+        )
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        fake_investigation,
+    )
+
+    response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "AI investigation provider is not supported"
+    )
+    assert "secret-provider-name" not in response.text
+
 
 def test_run_ai_investigation_endpoint_handles_exhausted_api_quota(
     monkeypatch,

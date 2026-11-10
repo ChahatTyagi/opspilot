@@ -1,4 +1,5 @@
 
+import math
 import os
 
 from dotenv import load_dotenv
@@ -7,6 +8,7 @@ load_dotenv()
 
 
 def get_database_url() -> str:
+    """Return the configured database URL."""
     database_url = os.getenv("DATABASE_URL")
 
     if not database_url:
@@ -46,6 +48,63 @@ def get_ollama_model() -> str:
         "OLLAMA_MODEL",
         "qwen3.5:9b-q4_K_M",
     ).strip()
+
+
+def get_ollama_timeout() -> float:
+    """Return the timeout for Ollama requests in seconds."""
+    try:
+        timeout = float(
+            os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "OLLAMA_TIMEOUT_SECONDS must be a valid number"
+        ) from exc
+
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError(
+            "OLLAMA_TIMEOUT_SECONDS must be greater than zero"
+        )
+
+    return timeout
+
+
+def get_ollama_num_predict() -> int:
+    """Return the maximum number of tokens Ollama can generate."""
+    try:
+        num_predict = int(
+            os.getenv("OLLAMA_NUM_PREDICT", "1024")
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "OLLAMA_NUM_PREDICT must be a valid integer"
+        ) from exc
+
+    if num_predict <= 0:
+        raise ValueError(
+            "OLLAMA_NUM_PREDICT must be greater than zero"
+        )
+
+    return num_predict
+
+
+def get_ollama_num_ctx() -> int:
+    """Return the context window size for Ollama."""
+    try:
+        num_ctx = int(
+            os.getenv("OLLAMA_NUM_CTX", "8192")
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "OLLAMA_NUM_CTX must be a valid integer"
+        ) from exc
+
+    if num_ctx <= 0:
+        raise ValueError(
+            "OLLAMA_NUM_CTX must be greater than zero"
+        )
+
+    return num_ctx
 
 
 def get_allowed_origins() -> list[str]:

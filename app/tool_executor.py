@@ -8,6 +8,7 @@ from app.investigation_tools import search_incident_evidence
 MAX_TOOL_CALLS = 5
 MAX_ARGUMENTS_LENGTH = 1000
 MAX_ERROR_LENGTH = 200
+MAX_SEARCH_QUERY_LENGTH = 120
 
 
 class InvestigationToolExecutor:
@@ -93,6 +94,21 @@ class InvestigationToolExecutor:
                     "error": "Tool argument 'query' must be a string.",
                 }
 
+            if not arguments["query"].strip():
+                return {
+                    "ok": False,
+                    "error": "Search query cannot be empty.",
+                }
+
+            if len(arguments["query"]) > MAX_SEARCH_QUERY_LENGTH:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"Search query cannot exceed "
+                        f"{MAX_SEARCH_QUERY_LENGTH} characters. "
+                        "Use a short, focused keyword or phrase."
+                    ),
+                }
         call_signature = (tool_name, serialized_arguments)
 
         if call_signature in self.seen_calls:
@@ -132,15 +148,25 @@ class InvestigationToolExecutor:
     def _search_incident_evidence(self, arguments: dict) -> dict:
         """Search evidence for this incident and track returned evidence IDs."""
 
+
         results = search_incident_evidence(
             query=arguments["query"],
             incident_id=self.incident_id,
             evidence_items=self.evidence_items,
         )
 
-        self.returned_evidence_ids.update(
+        current_evidence_ids = {
             item["evidence_id"]
             for item in results
+        }
+
+        new_evidence_ids = (
+            current_evidence_ids - self.returned_evidence_ids
         )
 
-        return {"results": results}
+        self.returned_evidence_ids.update(current_evidence_ids)
+
+        return {
+            "results": results,
+            "new_evidence_ids": sorted(new_evidence_ids),
+        }

@@ -14,10 +14,13 @@ from app.analyzer import analyze_evidence
 from app.config import get_allowed_origins
 from app.database import get_db
 from app.db_models import IncidentEvidence, IncidentRecord
-from app.investigation_service import run_ai_investigation
-from openai import RateLimitError
-
+from app.investigation_service import (
+    UnsupportedLLMProviderError,
+    run_ai_investigation,
+)
 from app.llm_client import LLMConfigurationError
+from app.ollama_client import OllamaRequestError
+from openai import RateLimitError
 from app.models import (
     EvidenceAnalysisResponse,
     EvidenceCounts,
@@ -420,6 +423,7 @@ def investigate_incident(
             incident=incident,
             evidence=evidence,
         )
+
     except RateLimitError as exc:
         error_body = exc.body
         error_details = (
@@ -450,6 +454,19 @@ def investigate_incident(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI investigation is not configured",
         )
+
+    except OllamaRequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI investigation provider is unavailable",
+        ) from exc
+
+    except UnsupportedLLMProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI investigation provider is not supported",
+        ) from exc
+
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

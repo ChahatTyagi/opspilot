@@ -16,7 +16,7 @@ from app.llm_client import (
     generate_investigation_with_tools,
 )
 
-
+from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
 def make_result():
     return AIInvestigationResult(
         observed_facts=[
@@ -302,3 +302,75 @@ def test_generate_investigation_with_tools_rejects_missing_call_id(
         )
 
     executor.execute.assert_not_called()
+
+def test_generate_investigation_uses_shared_instructions(monkeypatch):
+    mock_client = Mock()
+    mock_client.responses.parse.return_value = SimpleNamespace(
+        output_parsed=make_result()
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_openai_model",
+        lambda: "test-model",
+    )
+
+    generate_investigation(
+        incident_context="Incident context",
+        client=mock_client,
+    )
+
+    call_kwargs = mock_client.responses.parse.call_args.kwargs
+
+    assert call_kwargs["instructions"] == INVESTIGATION_INSTRUCTIONS
+
+
+def test_generate_investigation_with_tools_uses_shared_instructions(
+    monkeypatch,
+):
+    mock_client = Mock()
+
+    tool_response = SimpleNamespace(
+        id="resp_tool_step",
+        output=[make_tool_call()],
+    )
+
+    final_response = SimpleNamespace(
+        output_parsed=make_result(),
+        output=[],
+    )
+
+    mock_client.responses.parse.side_effect = [
+        tool_response,
+        final_response,
+    ]
+
+    monkeypatch.setattr(
+        "app.llm_client.get_openai_model",
+        lambda: "test-model",
+    )
+
+    executor = Mock()
+    executor.max_calls = 5
+    executor.execute.return_value = {
+        "ok": True,
+        "results": [],
+    }
+
+    generate_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    expected_instructions = (
+        INVESTIGATION_INSTRUCTIONS
+        + "\nYou may use search_incident_evidence to find relevant evidence."
+    )
+
+    assert mock_client.responses.parse.call_count == 2
+
+    for call in mock_client.responses.parse.call_args_list:
+        assert (
+            call.kwargs["instructions"]
+            == expected_instructions
+        )

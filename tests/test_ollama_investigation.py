@@ -13,7 +13,7 @@ from app.ai_models import (
 from app.ollama_investigation import (
     generate_ollama_investigation_with_tools,
 )
-from app.tool_executor import InvestigationToolExecutor
+from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
 
 
 def make_result():
@@ -40,7 +40,7 @@ def make_result():
     )
 
 
-def make_tool_response():
+def make_tool_response(query="database errors"):
     return {
         "message": {
             "role": "assistant",
@@ -50,13 +50,63 @@ def make_tool_response():
                     "function": {
                         "name": "search_incident_evidence",
                         "arguments": {
-                            "query": "database errors"
+                            "query": query
                         },
                     }
                 }
             ],
         }
     }
+
+
+def make_multiple_tool_response(*queries):
+    """Create one assistant response containing multiple tool calls."""
+    return {
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "search_incident_evidence",
+                        "arguments": {"query": query},
+                    }
+                }
+                for query in queries
+            ],
+        }
+    }
+
+
+def make_evidence_result(evidence_id=10):
+    return {
+        "ok": True,
+        "results": [
+            {
+                "evidence_id": evidence_id,
+                "text": "Database connection errors were logged.",
+            }
+        ],
+        "new_evidence_ids": [evidence_id],
+    }
+
+
+def make_final_response(result):
+    return {
+        "message": {
+            "role": "assistant",
+            "content": result.model_dump_json(),
+        }
+    }
+
+
+def extract_tool_results(messages):
+    """Extract tool-result messages from a conversation."""
+    return [
+        message
+        for message in messages
+        if message.get("role") == "tool"
+    ]
 
 
 def test_ollama_investigation_returns_structured_result():
@@ -71,25 +121,12 @@ def test_ollama_investigation_returns_structured_result():
                 "content": "Search completed.",
             }
         },
-        {
-            "message": {
-                "role": "assistant",
-                "content": expected_result.model_dump_json(),
-            }
-        },
+        make_final_response(expected_result),
     ]
 
     executor = Mock()
     executor.max_calls = 5
-    executor.execute.return_value = {
-        "ok": True,
-        "results": [
-            {
-                "evidence_id": 10,
-                "text": "Database connection errors were logged.",
-            }
-        ],
-    }
+    executor.execute.return_value = make_evidence_result()
 
     result = generate_ollama_investigation_with_tools(
         incident_context="Incident context",
@@ -118,20 +155,12 @@ def test_ollama_investigation_sends_tool_results_back():
                 "content": "Search completed.",
             }
         },
-        {
-            "message": {
-                "role": "assistant",
-                "content": expected_result.model_dump_json(),
-            }
-        },
+        make_final_response(expected_result),
     ]
 
     executor = Mock()
     executor.max_calls = 5
-    executor.execute.return_value = {
-        "ok": True,
-        "results": [{"evidence_id": 10}],
-    }
+    executor.execute.return_value = make_evidence_result()
 
     generate_ollama_investigation_with_tools(
         incident_context="Incident context",
@@ -155,6 +184,130 @@ def test_ollama_investigation_sends_tool_results_back():
 
     assert tool_result["ok"] is True
     assert tool_result["results"][0]["evidence_id"] == 10
+    assert tool_result["new_evidence_ids"] == [10]
+
+
+def test_ollama_investigation_passes_new_evidence_feedback():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.side_effect = [
+        make_tool_response(),
+        make_final_response(expected_result),
+    ]
+
+    executor = Mock()
+    executor.max_calls = 5
+    executor.execute.return_value = {
+        "ok": True,
+        "results": [
+            {"evidence_id": 10}
+        ],
+        "new_evidence_ids": [],
+    }
+
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    assert result == expected_result
+
+    final_call_messages = (
+        mock_client.chat.call_args_list[1].kwargs["messages"]
+    )
+
+    tool_result = json.loads(
+        final_call_messages[-2]["content"]
+    )
+
+    assert tool_result["new_evidence_ids"] == []
+
+
+def test_ollama_stops_after_search_returns_only_duplicate_evidence():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.side_effect = [
+        make_tool_response("database errors"),
+        make_tool_response("connection pool timeout"),
+        make_final_response(expected_result),
+    ]
+
+    executor = Mock()
+    executor.max_calls = 5
+    executor.execute.side_effect = [
+        {
+            "ok": True,
+            "results": [{"evidence_id": 10}],
+            "new_evidence_ids": [10],
+        },
+        {
+            "ok": True,
+            "results": [{"evidence_id": 10}],
+            "new_evidence_ids": [],
+        },
+    ]
+
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    assert result == expected_result
+    assert executor.execute.call_count == 2
+    assert mock_client.chat.call_count == 3
+
+    final_call_messages = (
+        mock_client.chat.call_args_list[2].kwargs["messages"]
+    )
+
+    second_tool_result = json.loads(
+        final_call_messages[-2]["content"]
+    )
+
+    assert second_tool_result["results"][0]["evidence_id"] == 10
+    assert second_tool_result["new_evidence_ids"] == []
+
+
+def test_ollama_continues_after_search_returns_no_results():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.side_effect = [
+        make_tool_response("missing database information"),
+        make_tool_response("database connection errors"),
+        {
+            "message": {
+                "role": "assistant",
+                "content": "Investigation complete.",
+            }
+        },
+        make_final_response(expected_result),
+    ]
+
+    executor = Mock()
+    executor.max_calls = 5
+    executor.execute.side_effect = [
+        {
+            "ok": True,
+            "results": [],
+            "new_evidence_ids": [],
+        },
+        make_evidence_result(),
+    ]
+
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    assert result == expected_result
+    assert executor.execute.call_count == 2
+    assert mock_client.chat.call_count == 4
 
 
 def test_ollama_investigation_rejects_malformed_tool_call():
@@ -186,47 +339,175 @@ def test_ollama_investigation_rejects_malformed_tool_call():
     executor.execute.assert_not_called()
 
 
-def test_ollama_investigation_enforces_tool_call_limit():
+def test_ollama_investigation_completes_after_tool_call_limit():
+    expected_result = make_result()
+
     mock_client = Mock()
-    mock_client.chat.return_value = {
-        "message": {
-            "content": "",
-            "tool_calls": [
-                {
-                    "function": {
-                        "name": "search_incident_evidence",
-                        "arguments": {"query": "database"},
-                    }
-                },
-                {
-                    "function": {
-                        "name": "search_incident_evidence",
-                        "arguments": {"query": "timeout"},
-                    }
-                },
-                {
-                    "function": {
-                        "name": "search_incident_evidence",
-                        "arguments": {"query": "connection"},
-                    }
-                },
-            ],
-        }
-    }
+    mock_client.chat.side_effect = [
+        make_multiple_tool_response(
+            "database",
+            "timeout",
+            "connection",
+        ),
+        make_final_response(expected_result),
+    ]
 
     executor = Mock()
     executor.max_calls = 2
-    executor.execute.return_value = {"ok": True, "results": []}
+    executor.execute.return_value = {
+        "ok": True,
+        "results": [],
+        "new_evidence_ids": [],
+    }
 
-    with pytest.raises(ValueError, match="tool-call limit"):
-        generate_ollama_investigation_with_tools(
-            incident_context="Incident context",
-            executor=executor,
-            client=mock_client,
-        )
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
 
+    assert result == expected_result
     assert executor.execute.call_count == 2
-    mock_client.chat.assert_called_once()
+    assert mock_client.chat.call_count == 2
+
+
+def test_ollama_returns_result_for_every_tool_call_after_limit():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.side_effect = [
+        make_multiple_tool_response(
+            "database",
+            "timeout",
+            "connection",
+            "deployment",
+        ),
+        make_final_response(expected_result),
+    ]
+
+    executor = Mock()
+    executor.max_calls = 2
+    executor.execute.return_value = {
+        "ok": True,
+        "results": [],
+        "new_evidence_ids": [],
+    }
+
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    assert result == expected_result
+    assert executor.execute.call_count == 2
+
+    final_messages = (
+        mock_client.chat.call_args_list[1].kwargs["messages"]
+    )
+
+    assistant_message = next(
+        message
+        for message in final_messages
+        if message.get("role") == "assistant"
+        and message.get("tool_calls")
+    )
+
+    tool_results = extract_tool_results(final_messages)
+
+    assert len(assistant_message["tool_calls"]) == 4
+    assert len(tool_results) == 4
+
+    first_two_results = [
+        json.loads(message["content"])
+        for message in tool_results[:2]
+    ]
+
+    last_two_results = [
+        json.loads(message["content"])
+        for message in tool_results[2:]
+    ]
+
+    assert all(result["ok"] is True for result in first_two_results)
+    assert all(result["ok"] is False for result in last_two_results)
+
+    assert all(
+        "limit" in result["error"].lower()
+        for result in last_two_results
+    )
+
+
+def test_ollama_returns_result_for_remaining_calls_after_duplicate_evidence():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.side_effect = [
+        make_tool_response("initial database search"),
+        make_multiple_tool_response(
+            "database timeout",
+            "connection errors",
+            "deployment failures",
+        ),
+        make_final_response(expected_result),
+    ]
+
+    executor = Mock()
+    executor.max_calls = 5
+
+    executor.execute.side_effect = [
+        make_evidence_result(10),
+        {
+            "ok": True,
+            "results": [{"evidence_id": 10}],
+            "new_evidence_ids": [],
+        },
+    ]
+
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    assert result == expected_result
+
+    # The initial search and first call in the second response execute.
+    # The remaining calls must not execute after duplicate-only results.
+    assert executor.execute.call_count == 2
+
+    final_messages = (
+        mock_client.chat.call_args_list[2].kwargs["messages"]
+    )
+
+    assistant_message = [
+        message
+        for message in final_messages
+        if message.get("role") == "assistant"
+        and message.get("tool_calls")
+    ][-1]
+
+    tool_results = extract_tool_results(final_messages)
+
+    assert len(assistant_message["tool_calls"]) == 3
+    assert len(tool_results) == 4
+    # The duplicate result is the third-last tool result.
+    duplicate_result = json.loads(tool_results[-3]["content"])
+
+    assert duplicate_result["ok"] is True
+    assert duplicate_result["new_evidence_ids"] == []
+
+    # The final two searches must be rejected without execution.
+    skipped_results = [
+        json.loads(message["content"])
+        for message in tool_results[-2:]
+    ]
+
+    assert all(result["ok"] is False for result in skipped_results)
+
+    assert all(
+        "Search stopped" in result["error"]
+        for result in skipped_results
+    )
 
 
 def test_ollama_investigation_rejects_invalid_final_json():
@@ -256,3 +537,58 @@ def test_ollama_investigation_rejects_invalid_final_json():
             executor=executor,
             client=mock_client,
         )
+
+
+def test_ollama_uses_shared_investigation_instructions():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.side_effect = [
+        {
+            "message": {
+                "role": "assistant",
+                "content": "Investigation complete.",
+            }
+        },
+        make_final_response(expected_result),
+    ]
+
+    executor = Mock()
+    executor.max_calls = 5
+
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    assert result == expected_result
+
+    first_call_messages = (
+        mock_client.chat.call_args_list[0].kwargs["messages"]
+    )
+
+    assert first_call_messages[0]["role"] == "system"
+    assert (
+        first_call_messages[0]["content"]
+        == INVESTIGATION_INSTRUCTIONS
+    )
+
+
+def test_shared_instructions_include_evidence_search_strategy():
+    assert "9. EVIDENCE SEARCH STRATEGY" in INVESTIGATION_INSTRUCTIONS
+
+    assert (
+        "search for additional relevant evidence"
+        in INVESTIGATION_INSTRUCTIONS
+    )
+
+    assert (
+        "Use targeted search queries"
+        in INVESTIGATION_INSTRUCTIONS
+    )
+
+    assert (
+        "Never treat search queries, tool-call decisions, or"
+        in INVESTIGATION_INSTRUCTIONS
+    )

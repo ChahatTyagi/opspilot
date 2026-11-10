@@ -15,6 +15,8 @@ from app.ollama_investigation import (
 )
 from app.tool_executor import InvestigationToolExecutor
 
+class UnsupportedLLMProviderError(RuntimeError):
+    """Raised when the configured LLM provider is not supported."""
 
 def run_ai_investigation(
     *,
@@ -64,7 +66,7 @@ def run_ai_investigation(
         )
 
     else:
-        raise ValueError(
+        raise UnsupportedLLMProviderError(
             f"Unsupported LLM provider: {provider}. "
             "Supported providers are 'openai' and 'ollama'."
         )

@@ -5,7 +5,7 @@ def validate_evidence_references(
     result: AIInvestigationResult,
     valid_evidence_ids: set[int],
 ) -> AIInvestigationResult:
-    """Reject AI claims that reference evidence outside this incident."""
+    """Validate evidence references and reject duplicate hypotheses."""
 
     invalid_ids: set[int] = set()
 
@@ -31,5 +31,20 @@ def validate_evidence_references(
             f"AI result references evidence IDs not belonging "
             f"to this incident: {invalid_ids_text}"
         )
+
+    # Normalize hypothesis explanations before checking for duplicates.
+    seen_hypotheses: set[str] = set()
+
+    for hypothesis in result.hypotheses:
+        normalized_explanation = " ".join(
+            hypothesis.explanation.casefold().split()
+        )
+
+        if normalized_explanation in seen_hypotheses:
+            raise ValueError(
+                "AI result contains a duplicate hypothesis."
+            )
+
+        seen_hypotheses.add(normalized_explanation)
 
     return result

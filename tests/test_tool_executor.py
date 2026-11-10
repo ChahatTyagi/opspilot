@@ -174,3 +174,51 @@ def test_executor_tracks_only_evidence_returned_by_search(executor):
 
     assert result["ok"] is True
     assert executor.returned_evidence_ids == {10}
+
+
+def test_executor_reports_new_and_previously_returned_evidence(executor):
+    first = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "database"},
+    )
+
+    second = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "connection"},
+    )
+
+    assert first["ok"] is True
+    assert second["ok"] is True
+
+    assert first["new_evidence_ids"] == [10]
+    assert second["new_evidence_ids"] == []
+
+def test_executor_rejects_search_query_over_120_characters(executor):
+    result = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "x" * 121},
+    )
+
+    assert result["ok"] is False
+    assert "120 characters" in result["error"]
+
+
+def test_oversized_search_query_does_not_consume_call_limit(executor):
+    result = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "x" * 121},
+    )
+
+    assert result["ok"] is False
+    assert executor.call_count == 0
+
+
+def test_executor_rejects_whitespace_only_search_query(executor):
+    result = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "   "},
+    )
+
+    assert result["ok"] is False
+    assert "empty" in result["error"].lower()
+    assert executor.call_count == 0

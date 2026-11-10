@@ -112,3 +112,27 @@ def test_raises_if_incident_metadata_exceeds_context_limit():
         match="exceeds the maximum context size",
     ):
         build_incident_context(incident, [])
+
+def test_context_notice_distinguishes_observations_from_suggestions():
+    context = build_incident_context(
+        make_incident(),
+        [
+            make_evidence(
+                evidence_id=919,
+                content=(
+                    "PostgreSQL connection pool exhausted. "
+                    "All 50 connections are active. "
+                    "Investigate possible connection leak."
+                ),
+            )
+        ],
+    )
+
+    parsed = json.loads(context)
+    notice = parsed["evidence_notice"]
+
+    assert "recommendations" in notice
+    assert "suspicions" in notice
+    assert "suggested actions" in notice
+    assert "does not prove" in notice
+    assert "every relevant directly supported" in notice

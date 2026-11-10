@@ -11,13 +11,19 @@ from app.ai_models import (
     AIFact,
     AIInvestigationResult,
 )
-from app.investigation_service import run_ai_investigation
+from app.investigation_service import (
+    UnsupportedLLMProviderError,
+    run_ai_investigation,
+)
+
+
 @pytest.fixture(autouse=True)
 def use_openai_provider_by_default(monkeypatch):
     monkeypatch.setattr(
         "app.investigation_service.get_llm_provider",
         lambda: "openai",
     )
+
 
 def make_incident():
     return SimpleNamespace(
@@ -107,7 +113,7 @@ def test_run_ai_investigation_rejects_unknown_evidence_reference(
     with pytest.raises(ValueError, match="999"):
         run_ai_investigation(
             incident=make_incident(),
-            evidence=[make_evidence(evidence_id=10)],
+            evidence=[make_evidence()],
         )
 
 
@@ -137,9 +143,8 @@ def test_run_ai_investigation_rejects_evidence_omitted_from_context(
 def test_run_ai_investigation_rejects_evidence_from_another_incident(
     monkeypatch,
 ):
-    generator = Mock(
-        return_value=make_result(evidence_ids=[10])
-    )
+    generator = Mock(return_value=make_result(evidence_ids=[10]))
+
     monkeypatch.setattr(
         "app.investigation_service.generate_investigation_with_tools",
         generator,
@@ -169,6 +174,7 @@ def test_run_ai_investigation_accepts_evidence_returned_by_search_tool(
         )
         for index in range(1, 19)
     ]
+
     evidence.append(
         make_evidence(
             evidence_id=19,
@@ -218,6 +224,7 @@ def test_run_ai_investigation_rejects_evidence_not_returned_by_search(
         )
         for index in range(1, 19)
     ]
+
     evidence.append(
         make_evidence(
             evidence_id=19,
@@ -231,7 +238,6 @@ def test_run_ai_investigation_rejects_evidence_not_returned_by_search(
         executor,
         client,
     ):
-        # Search does not return evidence ID 19.
         search_result = executor.execute(
             tool_name="search_incident_evidence",
             arguments={"query": "missing-keyword"},
@@ -324,7 +330,10 @@ def test_run_ai_investigation_rejects_unsupported_provider(monkeypatch):
         lambda: "unsupported-provider",
     )
 
-    with pytest.raises(ValueError, match="Unsupported LLM provider"):
+    with pytest.raises(
+        UnsupportedLLMProviderError,
+        match="Unsupported LLM provider",
+    ):
         run_ai_investigation(
             incident=make_incident(),
             evidence=[make_evidence()],

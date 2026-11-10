@@ -42,6 +42,32 @@ def test_search_returns_matching_evidence_from_current_incident():
     assert results[0]["incident_id"] == 42
     assert "Database connection timeout" in results[0]["text"]
 
+def test_search_ranks_evidence_by_matching_term_count():
+    evidence = [
+        make_evidence(
+            evidence_id=10,
+            content="Database connection is healthy.",
+        ),
+        make_evidence(
+            evidence_id=11,
+            content="Database connection timeout occurred.",
+        ),
+        make_evidence(
+            evidence_id=12,
+            content="Timeout while processing checkout.",
+        ),
+    ]
+
+    results = search_incident_evidence(
+        query="database timeout",
+        incident_id=42,
+        evidence_items=evidence,
+    )
+
+    assert [
+        item["evidence_id"] for item in results
+    ] == [11, 10, 12]
+
 
 def test_search_does_not_return_evidence_from_another_incident():
     evidence = [

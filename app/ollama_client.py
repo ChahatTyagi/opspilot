@@ -1,9 +1,14 @@
 
+import math
+
 import httpx
 
 from app.config import (
     get_ollama_base_url,
     get_ollama_model,
+    get_ollama_num_ctx,
+    get_ollama_num_predict,
+    get_ollama_timeout,
 )
 
 
@@ -19,13 +24,65 @@ class OllamaClient:
         *,
         base_url: str | None = None,
         model: str | None = None,
-        timeout: float = 180.0,
+        timeout: float | None = None,
+        num_predict: int | None = None,
+        num_ctx: int | None = None,
     ):
         self.base_url = (
             base_url or get_ollama_base_url()
         )
         self.model = model or get_ollama_model()
-        self.timeout = timeout
+
+        self.timeout = (
+            timeout
+            if timeout is not None
+            else get_ollama_timeout()
+        )
+
+        self.num_predict = (
+            num_predict
+            if num_predict is not None
+            else get_ollama_num_predict()
+        )
+
+        self.num_ctx = (
+            num_ctx
+            if num_ctx is not None
+            else get_ollama_num_ctx()
+        )
+
+        self._validate_configuration()
+
+    def _validate_configuration(self) -> None:
+        """Validate the configuration used by this client."""
+
+        if (
+            isinstance(self.timeout, bool)
+            or not isinstance(self.timeout, (int, float))
+            or not math.isfinite(self.timeout)
+            or self.timeout <= 0
+        ):
+            raise ValueError(
+                "Ollama timeout must be a finite number greater than zero"
+            )
+
+        if (
+            isinstance(self.num_predict, bool)
+            or not isinstance(self.num_predict, int)
+            or self.num_predict <= 0
+        ):
+            raise ValueError(
+                "Ollama num_predict must be a positive integer"
+            )
+
+        if (
+            isinstance(self.num_ctx, bool)
+            or not isinstance(self.num_ctx, int)
+            or self.num_ctx <= 0
+        ):
+            raise ValueError(
+                "Ollama num_ctx must be a positive integer"
+            )
 
     def chat(
         self,
@@ -41,6 +98,10 @@ class OllamaClient:
             "messages": messages,
             "stream": False,
             "think": False,
+            "options": {
+                "num_predict": self.num_predict,
+                "num_ctx": self.num_ctx,
+            },
         }
 
         if tools is not None:
