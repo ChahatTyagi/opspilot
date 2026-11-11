@@ -135,7 +135,7 @@ LABEL_GROUPS = {
         2044, 2047,
         2057,
         2064, 2065, 2066,
-        2074, 2075, 2077,
+        2074, 2075,
         2085, 2087,
         2098,
         2104, 2106, 2107,
@@ -146,7 +146,7 @@ LABEL_GROUPS = {
         2154, 2157,
         2165, 2166, 2167,
         2174, 2175, 2178,
-        2184, 2186, 2187, 2188,
+        2187, 2188,
         2194, 2195, 2196, 2197, 2198,
     ],
 
@@ -158,7 +158,7 @@ LABEL_GROUPS = {
         2045, 2046, 2048,
         2056, 2058,
         2067, 2068,
-        2076, 2078,
+        2076, 2078, 2077,
         2084, 2086,
         2096, 2097,
         2108,
@@ -169,7 +169,7 @@ LABEL_GROUPS = {
         2155, 2156,
         2164, 2168,
         2176, 2177,
-        2185,
+        2185, 2184, 2186,
     ],
 }
 
@@ -279,7 +279,7 @@ def validate_labels():
     }
 
     if DIRECT_RELEVANT_IDS != expected_direct:
-        raise ValueError("Direct relevance set is inconsistent.")
+        raise ValueError("Direct relevance set isinconsistent.")
 
     if DIAGNOSTIC_RELEVANT_IDS != expected_diagnostic:
         raise ValueError("Diagnostic relevance set is inconsistent.")
