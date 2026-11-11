@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.retrieval_service import EvidenceRetriever
-
+from app.embeddings import LocalEmbedder
+from app.ollama_embeddings import OllamaEmbedder
 
 class FakeEmbedder:
     def embed_texts(self, texts):
@@ -160,3 +161,59 @@ def test_retrieve_rejects_wrong_number_of_embedding_vectors(
         retriever.retrieve("Why is payment failing?", evidence)
 
     assert retriever._embedding_cache == {}
+
+
+
+def test_retriever_defaults_to_local_embedder(monkeypatch):
+    monkeypatch.setattr(
+        "app.retrieval_service.get_embedding_provider",
+        lambda: "local",
+    )
+
+    retriever = EvidenceRetriever()
+
+    assert isinstance(retriever.embedder, LocalEmbedder)
+
+
+def test_retriever_selects_ollama_embedder(monkeypatch):
+    monkeypatch.setattr(
+        "app.retrieval_service.get_embedding_provider",
+        lambda: "ollama",
+    )
+
+    retriever = EvidenceRetriever()
+
+    assert isinstance(retriever.embedder, OllamaEmbedder)
+
+
+def test_retriever_rejects_unsupported_provider(monkeypatch):
+    monkeypatch.setattr(
+        "app.retrieval_service.get_embedding_provider",
+        lambda: "unsupported",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Unsupported embedding provider",
+    ):
+        EvidenceRetriever()
+
+
+def test_explicit_embedder_overrides_configured_provider(
+    monkeypatch,
+):
+    embedder = FakeEmbedder()
+
+    def unexpected_provider_lookup():
+        raise AssertionError(
+            "Provider should not be checked when an embedder is supplied"
+        )
+
+    monkeypatch.setattr(
+        "app.retrieval_service.get_embedding_provider",
+        unexpected_provider_lookup,
+    )
+
+    retriever = EvidenceRetriever(embedder=embedder)
+
+    assert retriever.embedder is embedder

@@ -10,6 +10,8 @@ from app.config import (
     get_ollama_timeout,
     get_ollama_num_predict,
     get_ollama_num_ctx,
+    get_embedding_provider,
+    get_ollama_embedding_model,
 )
 
 
@@ -149,3 +151,36 @@ def test_ollama_num_ctx_rejects_invalid_values(monkeypatch, value):
 
     with pytest.raises(ValueError):
         get_ollama_num_ctx()
+
+
+
+# Embedding provider tests
+
+def test_embedding_provider_defaults_to_local(monkeypatch):
+    monkeypatch.delenv("EMBEDDING_PROVIDER", raising=False)
+
+    assert get_embedding_provider() == "local"
+
+
+def test_embedding_provider_can_be_set_to_ollama(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "ollama")
+
+    assert get_embedding_provider() == "ollama"
+
+
+def test_embedding_provider_is_normalized(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_PROVIDER", " OLLAMA ")
+
+    assert get_embedding_provider() == "ollama"
+
+
+def test_ollama_embedding_model_has_default(monkeypatch):
+    monkeypatch.delenv("OLLAMA_EMBEDDING_MODEL", raising=False)
+
+    assert get_ollama_embedding_model() == "all-minilm"
+
+
+def test_ollama_embedding_model_can_be_configured(monkeypatch):
+    monkeypatch.setenv("OLLAMA_EMBEDDING_MODEL", "custom-embedding")
+
+    assert get_ollama_embedding_model() == "custom-embedding"

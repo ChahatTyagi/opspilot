@@ -24,6 +24,23 @@ def get_llm_provider() -> str:
     return os.getenv("LLM_PROVIDER", "openai").strip().lower()
 
 
+
+def get_embedding_provider() -> str:
+    """Return the configured embedding provider."""
+    return os.getenv(
+        "EMBEDDING_PROVIDER",
+        "local",
+    ).strip().lower()
+
+
+def get_ollama_embedding_model() -> str:
+    """Return the configured Ollama embedding model."""
+    return os.getenv(
+        "OLLAMA_EMBEDDING_MODEL",
+        "all-minilm",
+    ).strip()
+
+
 def get_openai_api_key() -> str | None:
     """Return the OpenAI API key if configured."""
     return os.getenv("OPENAI_API_KEY")
