@@ -6,7 +6,10 @@ from openai import OpenAI
 
 from app.ai_models import AIInvestigationResult
 from app.config import get_llm_provider
-from app.evidence_validation import validate_evidence_references
+from app.evidence_validation import (
+    validate_evidence_references,
+    validate_investigation_quality,
+)
 from app.incident_context import build_incident_context
 from app.llm_client import generate_investigation_with_tools
 from app.ollama_client import OllamaClient
@@ -74,7 +77,9 @@ def run_ai_investigation(
     # Add only evidence IDs actually returned by successful tool searches.
     valid_evidence_ids.update(executor.returned_evidence_ids)
 
-    return validate_evidence_references(
+    validated_result = validate_evidence_references(
         result,
         valid_evidence_ids=valid_evidence_ids,
     )
+
+    return validate_investigation_quality(validated_result)

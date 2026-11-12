@@ -338,3 +338,42 @@ def test_run_ai_investigation_rejects_unsupported_provider(monkeypatch):
             incident=make_incident(),
             evidence=[make_evidence()],
         )
+
+
+def test_run_ai_investigation_rejects_blank_observed_fact(
+    monkeypatch,
+):
+    result = make_result()
+    result.observed_facts[0].statement = "   "
+
+    monkeypatch.setattr(
+        "app.investigation_service.generate_investigation_with_tools",
+        lambda **kwargs: result,
+    )
+
+    with pytest.raises(ValueError, match="blank observed fact"):
+        run_ai_investigation(
+            incident=make_incident(),
+            evidence=[make_evidence()],
+        )
+
+
+def test_run_ai_investigation_rejects_blank_recommended_check(
+    monkeypatch,
+):
+    result = make_result()
+    result.recommended_checks = ["   "]
+
+    monkeypatch.setattr(
+        "app.investigation_service.generate_investigation_with_tools",
+        lambda **kwargs: result,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="blank entry in recommended_checks",
+    ):
+        run_ai_investigation(
+            incident=make_incident(),
+            evidence=[make_evidence()],
+        )

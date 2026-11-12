@@ -6,7 +6,11 @@ from app.ai_models import (
     AIHypothesis,
     AIInvestigationResult,
 )
-from app.evidence_validation import validate_evidence_references
+from app.evidence_validation import (
+    validate_evidence_references,
+    validate_investigation_quality,
+)
+
 
 
 def make_result():
@@ -110,3 +114,45 @@ def test_rejects_duplicate_hypotheses_with_different_case_and_spacing():
             result,
             valid_evidence_ids={10, 11, 12},
         )
+
+
+def test_rejects_whitespace_only_fact_statement():
+    result = make_result()
+    result.observed_facts[0].statement = "   "
+
+    with pytest.raises(ValueError, match="observed fact"):
+        validate_investigation_quality(result)
+
+
+def test_rejects_whitespace_only_hypothesis():
+    result = make_result()
+    result.hypotheses[0].explanation = "   "
+
+    with pytest.raises(ValueError, match="hypothesis"):
+        validate_investigation_quality(result)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "reported_information",
+        "recommended_checks",
+        "unknowns",
+    ],
+)
+def test_rejects_whitespace_only_list_entries(field):
+    result = make_result()
+    setattr(result, field, ["   "])
+
+    with pytest.raises(ValueError, match=field):
+        validate_investigation_quality(result)
+
+
+def test_allows_legitimately_empty_lists():
+    result = make_result()
+    result.reported_information = []
+    result.hypotheses = []
+    result.recommended_checks = []
+    result.unknowns = []
+
+    assert validate_investigation_quality(result) is result

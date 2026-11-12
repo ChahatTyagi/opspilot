@@ -48,3 +48,40 @@ def validate_evidence_references(
         seen_hypotheses.add(normalized_explanation)
 
     return result
+
+
+def validate_investigation_quality(
+    result: AIInvestigationResult,
+) -> AIInvestigationResult:
+    """Reject blank text in an AI investigation result."""
+
+    # Check text fields inside observed facts.
+    for fact in result.observed_facts:
+        if not fact.statement.strip():
+            raise ValueError(
+                "AI result contains a blank observed fact."
+            )
+
+    # Check text fields inside hypotheses.
+    for hypothesis in result.hypotheses:
+        if not hypothesis.explanation.strip():
+            raise ValueError(
+                "AI result contains a blank hypothesis."
+            )
+
+    # Check each text-based list.
+    text_fields = {
+        "reported_information": result.reported_information,
+        "recommended_checks": result.recommended_checks,
+        "unknowns": result.unknowns,
+    }
+
+    for field_name, entries in text_fields.items():
+        for entry in entries:
+            if not entry.strip():
+                raise ValueError(
+                    f"AI result contains a blank entry in "
+                    f"{field_name}."
+                )
+
+    return result

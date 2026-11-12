@@ -74,6 +74,43 @@ FACT EXTRACTION PROCEDURE:
 - A complete extraction is more important than producing
   a large number of findings.
 
+FACT VS. HYPOTHESIS CLASSIFICATION EXAMPLE:
+
+Given these evidence records:
+
+Evidence ID 21:
+"ConnectionPoolTimeout occurred during checkout requests."
+
+Evidence ID 22:
+"Active connections: 50/50."
+
+Evidence ID 23:
+"Connection acquisition latency: 5200ms."
+
+Classify the findings as follows:
+
+OBSERVED FACTS:
+- "ConnectionPoolTimeout occurred during checkout requests."
+  Evidence IDs: [21]
+- "Active connections reached 50/50."
+  Evidence IDs: [22]
+- "Connection acquisition latency reached 5200ms."
+  Evidence IDs: [23]
+
+HYPOTHESIS:
+- "Connection pool saturation may be contributing to checkout failures."
+  Supporting evidence IDs: [21, 22, 23]
+  Confidence: LOW
+
+IMPORTANT DISTINCTIONS:
+- Report an explicitly recorded event or measurement as a fact.
+- Do not turn a measurement into an explanation of why it occurred.
+- A full connection pool does not prove that connections leaked.
+- Do not claim that connections were not released unless evidence
+  directly establishes that behavior.
+- Keep a supported observation in observed_facts even when it
+  also contributes to a hypothesis.
+
 4. HYPOTHESES AND CAUSALITY
 
 - Put possible explanations in hypotheses, not observed_facts.
@@ -119,6 +156,59 @@ CAUSAL REASONING CHECK:
   describe it as a possibility and assign LOW confidence.
 - Do not assume a deployment introduced a code defect solely
   because failures increased after that deployment.
+
+ADDITIONAL EVIDENCE AND CONFIDENCE RULES:
+
+1. Preserve measurements exactly as recorded. Do not describe a
+   measurement as an average, maximum, minimum, percentile, or
+   rate unless the evidence explicitly identifies it that way.
+
+2. When multiple observations indicate a possible failure mechanism,
+   but do not directly establish causation, classify the explanation
+   as LOW confidence.
+
+3. A full connection pool, connection timeout, and high acquisition
+   latency may support a hypothesis of connection pool saturation.
+   They do not independently establish why the pool became saturated.
+
+4. Do not introduce speculative explanations such as traffic spikes,
+   connection leaks, slow queries, or resource contention unless
+   evidence or incident context provides a specific reason to consider
+   them.
+
+5. Do not turn a possible explanation into an observed fact.
+
+6. Every hypothesis must explain which supplied evidence supports it.
+   If no specific evidence supports an explanation, do not include it.
+
+7. Keep statements grammatically complete and properly spaced.
+
+8. For the specific combination of connection pool timeouts,
+   a pool operating at its full configured capacity, and high
+   connection acquisition latency, classify connection pool
+   saturation as LOW confidence unless additional evidence
+   establishes the causal mechanism.
+
+9. Do not create multiple hypotheses that describe the same
+   underlying failure in different words. Merge overlapping
+   explanations into one hypothesis.
+
+10. Unknowns must describe missing information, not list
+    speculative causes as though they are findings.
+    For example, write:
+    "Historical connection utilization is unavailable."
+    Do not write:
+    "The issue could be caused by high traffic or connection leaks."
+
+11. Provide at least two specific recommended checks when
+    the evidence contains actionable diagnostic signals.
+    Each check must identify what to inspect and what the
+    inspection could help establish.
+
+12. Do not leave recommended_checks empty when the supplied
+    evidence supports meaningful diagnostic investigation. An empty
+    list is acceptable when no useful additional check exists.
+
 
 5. CONFIDENCE CALIBRATION
 
