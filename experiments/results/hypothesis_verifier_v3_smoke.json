@@ -1,0 +1,153 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-13T18:46:42.855326+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 3,
+  "evaluation_count": 3,
+  "metrics": {
+    "unique_benchmark_cases": 3,
+    "total_evaluations": 3,
+    "successful_evaluations": 3,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 3,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 3,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 3,
+      "rate_percent": 0.0
+    },
+    "production_validation": {
+      "evaluated_assessments": 3,
+      "accepted_assessments": 2,
+      "rejected_assessments": 1,
+      "acceptance_rate_percent": 66.67,
+      "production_usable_verdict_accuracy_percent": 66.67,
+      "production_usable_correct_verdicts": 2,
+      "production_usable_accuracy_denominator": 3
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 66.67,
+      "mean_case_level_recall_percent": 66.67,
+      "exact_match_count": 2,
+      "evaluated_cases": 3,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 0
+    },
+    "latency_seconds": {
+      "mean": 69.478,
+      "median": 68.414,
+      "p95": 77.214,
+      "minimum": 62.807,
+      "maximum": 77.214
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "SUP-01",
+      "category": "connection_pool_saturation",
+      "description": "Connection pool reaches capacity during timeouts.",
+      "hypothesis": "Database connection pool saturation caused API request timeouts.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        101,
+        102
+      ],
+      "actual_evidence_ids": [
+        101,
+        102
+      ],
+      "rationale": "The hypothesis proposes that database connection pool saturation caused API request timeouts. Evidence ID 101 establishes that active connections reached the configured maximum of 100 and remained there for a significant duration (4 minutes), confirming the condition of saturation. Evidence ID 102 provides specific error logs from the same interval indicating API failures due to 'timeout waiting to acquire a database connection from the application pool.' The temporal alignment between the saturation event (ID 101) and the timeout errors (ID 102), combined with the direct correlation in the error message between acquiring connections and timeouts, provides sufficient support for the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 77.214,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-02",
+      "category": "cpu_throttling",
+      "description": "Container CPU throttling coincides with latency.",
+      "hypothesis": "Container CPU throttling contributed to increased API request latency.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        111,
+        112
+      ],
+      "actual_evidence_ids": [],
+      "rationale": "The cited evidence establishes that CPU throttling occurred in 42% of measurement periods due to repeated CPU limit hits (evidence_id 111) and correlates this with a measured increase in API p95 latency from 180 ms to 2.4 seconds during the same interval (evidence_id 112). Since evidence 111 directly documents the proposed causal mechanism (CPU throttling) and evidence 112 demonstrates the reported effect (latency increase) in the same time window, the observations provide a reasonable basis for the proposed causal explanation.",
+      "verdict_correct": true,
+      "evidence_exact_match": false,
+      "evidence_precision": 0.0,
+      "evidence_recall": 0.0,
+      "latency_seconds": 62.807,
+      "error": null,
+      "production_validation_passed": false,
+      "production_validation_error": "ValueError: Supported assessment must cite supporting evidence.",
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": false
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-03",
+      "category": "consumer_failure",
+      "description": "Consumer crash explains message backlog.",
+      "hypothesis": "The inventory consumer crash caused messages to accumulate in the inventory processing queue.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        121,
+        122
+      ],
+      "actual_evidence_ids": [
+        121,
+        122
+      ],
+      "rationale": "The hypothesis proposes that an inventory consumer crash caused message accumulation. Evidence ID 121 establishes the cause: the inventory consumer exited unexpectedly at 14:02:11 and did not restart for six minutes. Evidence ID 122 provides the observed effect with direct timing alignment: queue depth increased from 120 to 18,400 messages between 14:02 and 14:08, which falls within the period of consumer absence described in ID 121. The temporal correlation and logical mechanism (consumer down -> messages accumulate) are directly supported by the cited evidence.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 68.414,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}

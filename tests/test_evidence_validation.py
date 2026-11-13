@@ -49,6 +49,28 @@ def make_assessment(
     )
 
 
+def validate_assessment(
+    assessment,
+    result=None,
+    valid_evidence_ids=None,
+):
+    if result is None:
+        result = make_result()
+
+    if valid_evidence_ids is None:
+        valid_evidence_ids = {10, 11, 12}
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[assessment]
+    )
+
+    return validate_hypothesis_verification(
+        result=result,
+        verification=verification,
+        valid_evidence_ids=valid_evidence_ids,
+    )
+
+
 def test_accepts_references_belonging_to_incident():
     result = make_result()
 
@@ -312,7 +334,10 @@ def test_rejects_hypothesis_without_supporting_evidence():
         ]
     )
 
-    with pytest.raises(ValueError, match="without supporting evidence"):
+    with pytest.raises(
+        ValueError,
+        match="without supporting evidence",
+    ):
         validate_hypothesis_verification(
             result=result,
             verification=verification,
@@ -329,7 +354,10 @@ def test_rejects_supported_verdict_without_evidence_ids():
         ]
     )
 
-    with pytest.raises(ValueError, match="must cite supporting evidence"):
+    with pytest.raises(
+        ValueError,
+        match="must cite supporting evidence",
+    ):
         validate_hypothesis_verification(
             result=result,
             verification=verification,
@@ -360,3 +388,214 @@ def test_preserves_other_investigation_fields_when_filtering():
     assert validated.observed_facts == result.observed_facts
     assert validated.unknowns == result.unknowns
     assert validated.recommended_checks == result.recommended_checks
+
+
+# ---------------------------------------------------------
+# New tests: rationale evidence citation consistency
+# ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "rationale",
+    [
+        "Evidence 11 supports the proposed mechanism.",
+        "Evidence ID 11 supports the proposed mechanism.",
+        "Evidence #11 supports the proposed mechanism.",
+        "Evidence IDs: 11 support the proposed mechanism.",
+    ],
+)
+def test_accepts_rationale_referencing_structured_evidence(rationale):
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale=rationale,
+    )
+
+    validated = validate_assessment(assessment)
+
+    assert len(validated.hypotheses) == 1
+
+
+def test_accepts_rationale_without_explicit_evidence_ids():
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale=(
+            "The observed connection pool saturation supports "
+            "the proposed mechanism."
+        ),
+    )
+
+    validated = validate_assessment(assessment)
+
+    assert len(validated.hypotheses) == 1
+
+
+def test_accepts_multiple_rationale_ids_matching_structured_ids():
+    result = make_result()
+    result.hypotheses[0].supporting_evidence_ids = [10, 11]
+
+    assessment = make_assessment(
+        evidence_ids=[10, 11],
+        rationale="Evidence IDs 10 and 11 support this assessment.",
+    )
+
+    validated = validate_assessment(
+        assessment,
+        result=result,
+    )
+
+    assert len(validated.hypotheses) == 1
+
+
+def test_accepts_comma_separated_rationale_evidence_ids():
+    result = make_result()
+    result.hypotheses[0].supporting_evidence_ids = [10, 11]
+
+    assessment = make_assessment(
+        evidence_ids=[10, 11],
+        rationale="Evidence IDs: 10, 11 support this assessment.",
+    )
+
+    validated = validate_assessment(
+        assessment,
+        result=result,
+    )
+
+    assert len(validated.hypotheses) == 1
+
+
+def test_rejects_rationale_with_unknown_evidence_id():
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale="Evidence 999 supports this assessment.",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="missing from its structured evidence_ids: 999",
+    ):
+        validate_assessment(assessment)
+
+
+def test_rejects_rationale_with_id_not_in_structured_citations():
+    result = make_result()
+    result.hypotheses[0].supporting_evidence_ids = [10, 11]
+
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale="Evidence 10 and 11 support this assessment.",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="missing from its structured evidence_ids: 10",
+    ):
+        validate_assessment(assessment, result=result)
+
+
+def test_rejects_rationale_with_multiple_uncited_evidence_ids():
+    result = make_result()
+    result.hypotheses[0].supporting_evidence_ids = [10, 11, 12]
+
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale="Evidence IDs 10, 12 and 99 support this assessment.",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="10, 12, 99",
+    ):
+        validate_assessment(
+            assessment,
+            result=result,
+            valid_evidence_ids={10, 11, 12, 99},
+        )
+
+
+def test_rejects_contradicted_rationale_with_missing_structured_ids():
+    assessment = make_assessment(
+        verdict=AIHypothesisVerdict.CONTRADICTED,
+        evidence_ids=[],
+        rationale="Evidence 11 contradicts the hypothesis.",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="missing from its structured evidence_ids: 11",
+    ):
+        validate_assessment(assessment)
+
+
+def test_does_not_treat_ordinary_numbers_as_evidence_ids():
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale=(
+            "The service returned HTTP 500 errors at 10:30. "
+            "This supports the proposed mechanism."
+        ),
+    )
+
+    validated = validate_assessment(assessment)
+
+    assert len(validated.hypotheses) == 1
+
+
+@pytest.mark.parametrize(
+    "rationale",
+    [
+        "evidence_id 11 supports the proposed mechanism.",
+        "evidence_id: 11 supports the proposed mechanism.",
+        "evidence_ids: 11 support the proposed mechanism.",
+        "Evidence_ids: 11 support the proposed mechanism.",
+    ],
+)
+def test_accepts_underscore_evidence_reference_formats(rationale):
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale=rationale,
+    )
+
+    validated = validate_assessment(assessment)
+
+    assert len(validated.hypotheses) == 1
+
+
+def test_accepts_comma_separated_underscore_evidence_ids():
+    result = make_result()
+    result.hypotheses[0].supporting_evidence_ids = [10, 11]
+
+    assessment = make_assessment(
+        evidence_ids=[10, 11],
+        rationale="evidence_ids: 10, 11 support this assessment.",
+    )
+
+    validated = validate_assessment(assessment, result=result)
+
+    assert len(validated.hypotheses) == 1
+
+
+def test_rejects_underscore_rationale_id_missing_from_structured_ids():
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale="The finding is supported by evidence_id: 999.",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="missing from its structured evidence_ids: 999",
+    ):
+        validate_assessment(assessment)
+
+
+def test_does_not_treat_ordinary_underscore_words_or_numbers_as_evidence_ids():
+    assessment = make_assessment(
+        evidence_ids=[11],
+        rationale=(
+            "The evidence processing job handled 111 records and "
+            "returned HTTP 500 at 10:30."
+        ),
+    )
+
+    validated = validate_assessment(assessment)
+
+    assert len(validated.hypotheses) == 1

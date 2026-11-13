@@ -352,12 +352,14 @@ def test_rejects_multiple_assessments_for_one_hypothesis():
         response=make_response(invalid_result)
     )
 
-    with pytest.raises(ValueError, match="exactly one assessment"):
+    with pytest.raises(ValueError, match="after one corrective retry"):
         verify_ollama_hypotheses(
             hypotheses=[make_hypothesis()],
             evidence=[make_evidence()],
             client=client,
         )
+
+    assert len(client.calls) == 2
 
 
 def test_rejects_incorrect_local_hypothesis_index():
@@ -369,12 +371,14 @@ def test_rejects_incorrect_local_hypothesis_index():
         response=make_response(invalid_result)
     )
 
-    with pytest.raises(ValueError, match="incorrect local hypothesis index"):
+    with pytest.raises(ValueError, match="after one corrective retry"):
         verify_ollama_hypotheses(
             hypotheses=[make_hypothesis()],
             evidence=[make_evidence()],
             client=client,
         )
+
+    assert len(client.calls) == 2
 
 
 def test_does_not_call_model_when_there_are_no_hypotheses():
@@ -388,3 +392,138 @@ def test_does_not_call_model_when_there_are_no_hypotheses():
 
     assert result.assessments == []
     assert client.calls == []
+
+
+def test_retries_supported_assessment_when_structured_evidence_ids_are_empty():
+    invalid_first = AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[],
+                rationale="The cited observation supports the mechanism.",
+            )
+        ]
+    )
+    valid_retry = make_verification(evidence_id=11)
+    client = FakeOllamaClient(
+        responses=[
+            make_response(invalid_first),
+            make_response(valid_retry),
+        ]
+    )
+
+    result = verify_ollama_hypotheses(
+        hypotheses=[make_hypothesis()],
+        evidence=[make_evidence()],
+        client=client,
+    )
+
+    assert len(client.calls) == 2
+    assert result.assessments[0].verdict == AIHypothesisVerdict.SUPPORTED
+    assert result.assessments[0].evidence_ids == [11]
+    assert "CORRECTIVE RETRY REQUIREMENTS" in (
+        client.calls[1]["messages"][0]["content"]
+    )
+    assert client.calls[0]["messages"][1]["content"] == (
+        client.calls[1]["messages"][1]["content"]
+    )
+
+
+def test_retries_when_rationale_uses_underscore_id_missing_from_structured_ids():
+    invalid_first = AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[],
+                rationale="The mechanism is supported by evidence_id 11.",
+            )
+        ]
+    )
+    valid_retry = AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[11],
+                rationale="The cited observation supports the mechanism.",
+            )
+        ]
+    )
+    client = FakeOllamaClient(
+        responses=[make_response(invalid_first), make_response(valid_retry)]
+    )
+
+    result = verify_ollama_hypotheses(
+        hypotheses=[make_hypothesis()],
+        evidence=[make_evidence()],
+        client=client,
+    )
+
+    assert len(client.calls) == 2
+    assert result.assessments[0].evidence_ids == [11]
+
+
+def test_raises_after_one_corrective_retry_also_fails_validation():
+    invalid_first = AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[],
+                rationale="The evidence supports the mechanism.",
+            )
+        ]
+    )
+    invalid_retry = AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[],
+                rationale="Still supported, but no structured citation.",
+            )
+        ]
+    )
+    client = FakeOllamaClient(
+        responses=[make_response(invalid_first), make_response(invalid_retry)]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="after one corrective retry",
+    ):
+        verify_ollama_hypotheses(
+            hypotheses=[make_hypothesis()],
+            evidence=[make_evidence()],
+            client=client,
+        )
+
+    assert len(client.calls) == 2
+
+
+def test_retries_when_verifier_cites_evidence_not_in_original_hypothesis():
+    invalid_first = AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[12],
+                rationale="The cited evidence supports this assessment.",
+            )
+        ]
+    )
+    valid_retry = make_verification(evidence_id=11)
+    client = FakeOllamaClient(
+        responses=[make_response(invalid_first), make_response(valid_retry)]
+    )
+
+    result = verify_ollama_hypotheses(
+        hypotheses=[make_hypothesis()],
+        evidence=[make_evidence(), make_evidence(evidence_id=12)],
+        client=client,
+    )
+
+    assert len(client.calls) == 2
+    assert result.assessments[0].evidence_ids == [11]

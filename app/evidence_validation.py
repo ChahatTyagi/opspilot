@@ -1,9 +1,63 @@
+import re
 
 from app.ai_models import (
     AIHypothesisVerdict,
     AIInvestigationResult,
     AIHypothesisVerificationResult,
 )
+
+
+# Accept both natural-language and machine-style evidence references:
+# Evidence 123, Evidence ID 123, Evidence IDs: 123, evidence_id: 123,
+# evidence_ids: 123, 124, etc.
+_EVIDENCE_REFERENCE_PATTERN = re.compile(
+    r"\b(?:evidence(?:\s+ids?)?|evidence_ids?)\s*[:#]?\s*#?(\d+)",
+    re.IGNORECASE,
+)
+
+_ADDITIONAL_EVIDENCE_REFERENCE_PATTERN = re.compile(
+    r"\s*(?:,|and|&)\s*#?(\d+)\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_rationale_evidence_ids(rationale: str) -> set[int]:
+    """Extract explicitly written evidence IDs from a verifier rationale.
+
+    Supported examples include:
+    - Evidence 123
+    - Evidence ID 123
+    - Evidence IDs: 123, 124
+    - Evidence 123 and 124
+    - Evidence #123
+    - evidence_id 123
+    - evidence_id: 123
+    - evidence_ids: 123, 124
+
+    Ordinary numbers that are not introduced as evidence references are
+    deliberately ignored.
+    """
+
+    evidence_ids: set[int] = set()
+
+    for match in _EVIDENCE_REFERENCE_PATTERN.finditer(rationale):
+        evidence_ids.add(int(match.group(1)))
+        position = match.end()
+
+        # Support lists such as "Evidence 123, 124 and 125" and
+        # "evidence_ids: 123, 124".
+        while True:
+            additional_match = _ADDITIONAL_EVIDENCE_REFERENCE_PATTERN.match(
+                rationale,
+                position,
+            )
+            if additional_match is None:
+                break
+
+            evidence_ids.add(int(additional_match.group(1)))
+            position = additional_match.end()
+
+    return evidence_ids
 
 
 def validate_evidence_references(
@@ -33,7 +87,7 @@ def validate_evidence_references(
             str(evidence_id) for evidence_id in sorted(invalid_ids)
         )
         raise ValueError(
-            f"AI result references evidence IDs not belonging "
+            "AI result references evidence IDs not belonging "
             f"to this incident: {invalid_ids_text}"
         )
 
@@ -81,8 +135,7 @@ def validate_investigation_quality(
         for entry in entries:
             if not entry.strip():
                 raise ValueError(
-                    f"AI result contains a blank entry in "
-                    f"{field_name}."
+                    f"AI result contains a blank entry in {field_name}."
                 )
 
     return result
@@ -157,6 +210,24 @@ def validate_hypothesis_verification(
         ):
             raise ValueError(
                 "Supported assessment must cite supporting evidence."
+            )
+
+        # Explicit IDs in free-text rationale must agree with the
+        # structured evidence_ids field.
+        rationale_ids = _extract_rationale_evidence_ids(
+            assessment.rationale
+        )
+
+        if not rationale_ids.issubset(assessment_ids):
+            invalid_rationale_ids = rationale_ids - assessment_ids
+            invalid_ids_text = ", ".join(
+                str(evidence_id)
+                for evidence_id in sorted(invalid_rationale_ids)
+            )
+            raise ValueError(
+                "Verifier rationale references evidence IDs "
+                "that are missing from its structured evidence_ids: "
+                f"{invalid_ids_text}"
             )
 
         assessments_by_index[index] = assessment

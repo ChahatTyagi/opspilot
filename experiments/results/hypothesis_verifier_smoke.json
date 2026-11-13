@@ -1,0 +1,132 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 2,
+  "generated_at": "2026-11-13T18:27:01.284417+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 3,
+  "evaluation_count": 3,
+  "metrics": {
+    "unique_benchmark_cases": 3,
+    "total_evaluations": 3,
+    "successful_evaluations": 3,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 3,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 3,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 3,
+      "rate_percent": 0.0
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 66.67,
+      "mean_case_level_recall_percent": 66.67,
+      "exact_match_count": 2,
+      "evaluated_cases": 3,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 0
+    },
+    "latency_seconds": {
+      "mean": 67.441,
+      "median": 65.705,
+      "p95": 72.425,
+      "minimum": 64.193,
+      "maximum": 72.425
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "SUP-01",
+      "category": "connection_pool_saturation",
+      "description": "Connection pool reaches capacity during timeouts.",
+      "hypothesis": "Database connection pool saturation caused API request timeouts.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        101,
+        102
+      ],
+      "actual_evidence_ids": [
+        101,
+        102
+      ],
+      "rationale": "Evidence ID 101 documents that active database connections reached the configured maximum (saturation) for a sustained period. Evidence ID 102 shows API request timeouts with an explicit error message indicating failure to acquire a connection from the pool during that same interval. The combination of confirmed pool saturation and errors specifically attributed to connection acquisition failure directly supports the causal mechanism that pool saturation caused the timeouts.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 72.425,
+      "error": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-02",
+      "category": "cpu_throttling",
+      "description": "Container CPU throttling coincides with latency.",
+      "hypothesis": "Container CPU throttling contributed to increased API request latency.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        111,
+        112
+      ],
+      "actual_evidence_ids": [
+        111,
+        112
+      ],
+      "rationale": "The cited evidence explicitly links CPU throttling to increased latency through temporal correlation and quantitative measurements. Evidence ID 111 establishes that the container experienced frequent CPU throttling (reaching limits in 42% of periods) during the incident. Evidence ID 112 documents a specific increase in API p95 latency from 180 ms to 2.4 seconds within the same interval. The co-occurrence of resource saturation (throttling) and performance degradation (latency spike) in the same component during the same timeframe provides sufficient support for the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 65.705,
+      "error": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-03",
+      "category": "consumer_failure",
+      "description": "Consumer crash explains message backlog.",
+      "hypothesis": "The inventory consumer crash caused messages to accumulate in the inventory processing queue.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        121,
+        122
+      ],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes that the inventory consumer crash caused message accumulation. Evidence ID 121 establishes that the consumer crashed at 14:02:11 with no restart for six minutes. Evidence ID 122 shows the queue depth increased from 120 to 18,400 messages between 14:02 and 14:08. The timing aligns (crash followed by accumulation), and the lack of a consumer restart explains why the queue would fill up immediately after the crash. This provides specific support for the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": false,
+      "evidence_precision": 0.0,
+      "evidence_recall": 0.0,
+      "latency_seconds": 64.193,
+      "error": null
+    }
+  ]
+}

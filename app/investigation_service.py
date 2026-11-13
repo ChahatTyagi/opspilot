@@ -27,7 +27,6 @@ from app.ollama_verification import (
     verify_ollama_hypotheses,
 )
 from app.tool_executor import InvestigationToolExecutor
-from app.ollama_verification import build_verification_input
 
 
 class UnsupportedLLMProviderError(RuntimeError):

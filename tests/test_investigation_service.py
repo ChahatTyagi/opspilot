@@ -959,3 +959,43 @@ def test_run_ai_investigation_preserves_initial_recommendations_on_verifier_fail
     assert result.recommended_checks == [
         "Inspect connection pool utilization."
     ]
+
+
+def test_run_ai_investigation_withholds_ollama_hypotheses_after_retry_failure(
+    monkeypatch,
+):
+    original = make_hypothesis_result()
+    refiner = Mock()
+
+    monkeypatch.setattr(
+        "app.investigation_service.get_llm_provider",
+        lambda: "ollama",
+    )
+    monkeypatch.setattr(
+        "app.investigation_service.generate_ollama_investigation_with_tools",
+        lambda **kwargs: original,
+    )
+    monkeypatch.setattr(
+        "app.investigation_service.verify_ollama_hypotheses",
+        Mock(side_effect=ValueError(
+            "Ollama verifier returned an invalid assessment "
+            "after one corrective retry."
+        )),
+    )
+    monkeypatch.setattr(
+        "app.investigation_service.refine_ollama_investigation_recommendations",
+        refiner,
+    )
+
+    result = run_ai_investigation(
+        incident=make_incident(),
+        evidence=[make_evidence()],
+    )
+
+    assert result.hypotheses == []
+    assert result.observed_facts == original.observed_facts
+    assert any(
+        "independent verification could not be completed" in item
+        for item in result.unknowns
+    )
+    refiner.assert_not_called()
