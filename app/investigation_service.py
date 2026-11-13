@@ -11,15 +11,21 @@ from app.evidence_validation import (
     validate_investigation_quality,
 )
 from app.incident_context import build_incident_context
-from app.llm_client import generate_investigation_with_tools
+from app.llm_client import (
+    generate_investigation_with_tools,
+    refine_investigation_recommendations,
+)
 from app.ollama_client import OllamaClient
 from app.ollama_investigation import (
     generate_ollama_investigation_with_tools,
+    refine_ollama_investigation_recommendations,
 )
 from app.tool_executor import InvestigationToolExecutor
 
+
 class UnsupportedLLMProviderError(RuntimeError):
     """Raised when the configured LLM provider is not supported."""
+
 
 def run_ai_investigation(
     *,
@@ -77,9 +83,55 @@ def run_ai_investigation(
     # Add only evidence IDs actually returned by successful tool searches.
     valid_evidence_ids.update(executor.returned_evidence_ids)
 
+    # Validate the original investigation before considering refinement.
     validated_result = validate_evidence_references(
         result,
         valid_evidence_ids=valid_evidence_ids,
     )
+    validated_result = validate_investigation_quality(validated_result)
 
-    return validate_investigation_quality(validated_result)
+    # Refine only when there is a supported hypothesis but no checks.
+    has_supported_hypothesis = any(
+        hypothesis.supporting_evidence_ids
+        for hypothesis in validated_result.hypotheses
+    )
+
+    if validated_result.recommended_checks or not has_supported_hypothesis:
+        return validated_result
+
+    try:
+        # This is a separate model call. It does not repeat evidence searches.
+        if provider == "openai":
+            refined_result = refine_investigation_recommendations(
+                incident_context=incident_context,
+                draft_result=validated_result,
+                client=client,
+            )
+        else:
+            refined_result = refine_ollama_investigation_recommendations(
+                incident_context=incident_context,
+                draft_result=validated_result,
+                client=client,
+            )
+
+        # Validate the refinement before accepting any of its output.
+        refined_result = validate_evidence_references(
+            refined_result,
+            valid_evidence_ids=valid_evidence_ids,
+        )
+        refined_result = validate_investigation_quality(refined_result)
+
+        # Keep the original findings and accept only non-empty recommendations.
+        if refined_result.recommended_checks:
+            return validated_result.model_copy(
+                update={
+                    "recommended_checks": refined_result.recommended_checks
+                }
+            )
+
+    except Exception:
+        # Refinement is optional. A failed second call must not discard
+        # an otherwise valid initial investigation.
+        pass
+
+    return validated_result

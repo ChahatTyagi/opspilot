@@ -33,10 +33,13 @@ def test_prompt_discourages_duplicate_hypotheses():
     )
 
 
+
 def test_prompt_encourages_specific_diagnostic_checks():
-    assert "RECOMMENDED CHECKS" in INVESTIGATION_INSTRUCTIONS
-    assert "one to three" in INVESTIGATION_INSTRUCTIONS
-    assert "concrete checks" in INVESTIGATION_INSTRUCTIONS
+    normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
+
+    assert "RECOMMENDED CHECKS" in normalized_prompt
+    assert "two or three checks" in normalized_prompt
+    assert "specific and useful diagnostic checks" in normalized_prompt
 
 
 def test_prompt_preserves_evidence_security_rules():
@@ -110,7 +113,35 @@ def test_prompt_keeps_unknowns_separate_from_speculation():
 
 
 def test_prompt_requires_actionable_recommended_checks():
-    assert (
-        "Provide at least two specific recommended checks"
-        in INVESTIGATION_INSTRUCTIONS
+    normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
+
+    assert "at least two specific and useful diagnostic checks" in (
+        normalized_prompt
     )
+    assert "What to inspect." in normalized_prompt
+    assert "Why the inspection matters." in normalized_prompt
+    assert "What different results could establish." in normalized_prompt
+    assert "Inspecting connection utilization and waiting requests" in (
+        normalized_prompt
+    )
+    assert "Comparing connection acquisition and release counts" in (
+        normalized_prompt
+    )
+    assert "Leave recommended_checks empty only when the evidence" in (
+        normalized_prompt
+    )
+
+
+def test_prompt_separates_reported_information_from_evidence():
+    normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
+
+    assert "incident title" in normalized_prompt
+    assert "Do not copy evidence-only observations" in normalized_prompt
+    assert "independently stated in the incident report" in normalized_prompt
+
+
+def test_prompt_keeps_unknowns_focused_on_missing_information():
+    normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
+
+    assert "Describe missing information, not speculative explanations." in normalized_prompt
+    assert "Do not list possible root causes as unknowns." in normalized_prompt

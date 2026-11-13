@@ -6,6 +6,9 @@ from pydantic import ValidationError
 from app.ai_models import AIInvestigationResult
 from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
 from app.ollama_client import OllamaClient
+from app.refinement_prompts import (
+    RECOMMENDATION_REFINEMENT_INSTRUCTIONS,
+)
 from app.tool_executor import InvestigationToolExecutor
 
 
@@ -41,6 +44,53 @@ OLLAMA_TOOLS = [
 ]
 
 
+def refine_ollama_investigation_recommendations(
+    *,
+    incident_context: str,
+    draft_result: AIInvestigationResult,
+    client: OllamaClient | None = None,
+) -> AIInvestigationResult:
+    """Refine recommendations without repeating evidence searches."""
+
+    if client is None:
+        client = OllamaClient()
+
+    refinement_input = {
+        "original_incident_context": incident_context,
+        "draft_investigation": draft_result.model_dump(mode="json"),
+    }
+
+    messages = [
+        {
+            "role": "system",
+            "content": RECOMMENDATION_REFINEMENT_INSTRUCTIONS,
+        },
+        {
+            "role": "user",
+            "content": json.dumps(refinement_input),
+        },
+    ]
+
+    response = client.chat(
+        messages=messages,
+        format=AIInvestigationResult.model_json_schema(),
+    )
+
+    content = response["message"].get("content")
+
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError(
+            "Ollama did not return a refined investigation result"
+        )
+
+    try:
+        return AIInvestigationResult.model_validate_json(content)
+    except (ValueError, ValidationError) as exc:
+        raise ValueError(
+            "Ollama returned an invalid refined investigation result"
+        ) from exc
+
+
 def generate_ollama_investigation_with_tools(
     *,
     incident_context: str,
@@ -65,7 +115,6 @@ def generate_ollama_investigation_with_tools(
 
     tool_call_count = 0
 
-    # Continue the conversation while Ollama requests tools.
     while True:
         response = client.chat(
             messages=list(messages),
@@ -83,7 +132,6 @@ def generate_ollama_investigation_with_tools(
         if not tool_calls:
             break
 
-        # Preserve the assistant's original tool-call message.
         messages.append(message)
 
         stop_searching = False
@@ -107,9 +155,6 @@ def generate_ollama_investigation_with_tools(
             ):
                 raise ValueError("Malformed Ollama tool call")
 
-            # Once a search returns only previously discovered evidence,
-            # do not execute any more searches from this response.
-            # Still provide a result for every requested tool call.
             if stop_searching:
                 messages.append({
                     "role": "tool",
@@ -126,9 +171,6 @@ def generate_ollama_investigation_with_tools(
                 })
                 continue
 
-            # Enforce the overall tool-call budget.
-            # Calls beyond the limit receive an error result rather than
-            # being executed.
             if tool_call_count >= executor.max_calls:
                 messages.append({
                     "role": "tool",
@@ -157,21 +199,15 @@ def generate_ollama_investigation_with_tools(
                 "content": json.dumps(result),
             })
 
-            # Stop searching if the latest search returned evidence
-            # that was already discovered by an earlier search.
             returned_results = result.get("results", [])
             new_evidence_ids = result.get("new_evidence_ids", [])
 
             if returned_results and not new_evidence_ids:
                 stop_searching = True
 
-        # Every tool call in the assistant message now has a result.
-        # Stop requesting more model responses when searching is no
-        # longer useful or the execution budget has been exhausted.
         if stop_searching or tool_call_count >= executor.max_calls:
             break
 
-    # Request the final structured investigation.
     messages.append({
         "role": "user",
         "content": (

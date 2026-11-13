@@ -40,6 +40,13 @@ incident context and evidence supplied to you.
   a technically verified event.
 - Do not place incident-description statements in observed_facts
   unless evidence independently supports those statements.
+- Use only information explicitly stated in the incident title,
+  incident description, or user-provided report.
+- Do not copy evidence-only observations into reported_information.
+  Those belong in observed_facts unless they are independently
+  stated in the incident report.
+- Do not infer that an event occurred merely because evidence
+  was supplied to investigate whether it occurred.
 
 3. OBSERVED FACTS
 
@@ -200,16 +207,6 @@ ADDITIONAL EVIDENCE AND CONFIDENCE RULES:
     Do not write:
     "The issue could be caused by high traffic or connection leaks."
 
-11. Provide at least two specific recommended checks when
-    the evidence contains actionable diagnostic signals.
-    Each check must identify what to inspect and what the
-    inspection could help establish.
-
-12. Do not leave recommended_checks empty when the supplied
-    evidence supports meaningful diagnostic investigation. An empty
-    list is acceptable when no useful additional check exists.
-
-
 5. CONFIDENCE CALIBRATION
 
 Use confidence conservatively:
@@ -234,41 +231,44 @@ Additional rules:
 
 6. RECOMMENDED CHECKS
 
-- Recommend specific, useful diagnostic checks when they can
-  reduce uncertainty or distinguish between hypotheses.
-- When important uncertainty remains, provide one to three
-  concrete checks if useful checks can be identified.
-- Prefer checks that explain:
+- When the evidence contains actionable diagnostic signals,
+  provide at least two specific and useful diagnostic checks.
+- Usually provide two or three checks. Avoid unnecessary
+  recommendations that do not add diagnostic value.
+- Every check must explain:
   1. What to inspect.
-  2. Why it matters.
+  2. Why the inspection matters.
   3. What different results could establish.
-- Tailor checks to the actual incident and evidence.
-- For suspected resource exhaustion, consider comparing resource
-  utilization over time, inspecting acquisition and release
-  behavior, and checking relevant request or transaction metrics.
-- For suspected deployment-related issues, consider comparing
-  relevant behavior before and after the deployment.
-- Do not assume that these example components exist in every
-  incident.
+- Tailor checks to the actual incident and available evidence.
+- Prefer checks that reduce uncertainty or distinguish
+  between competing hypotheses.
+
+- For suspected resource exhaustion, consider:
+  1. Comparing resource utilization over time.
+  2. Inspecting resource acquisition and release behavior.
+  3. Checking relevant request or transaction metrics.
+
+- For suspected connection pool saturation, consider:
+  1. Inspecting connection utilization and waiting requests
+     over time to establish how long the pool remained full.
+  2. Comparing connection acquisition and release counts
+     and inspecting connection hold durations.
+  3. Checking request volume and transaction duration to
+     understand what coincided with the saturation.
+
+- For suspected deployment-related issues, compare relevant
+  metrics and behavior before and after deployment.
+- Do not assume that example infrastructure components exist
+  in every incident.
 - Do not invent infrastructure details that are not in evidence.
 - Recommendations must be non-destructive.
-- Do not recommend actions that modify production systems,
-  delete data, restart services, or change configurations.
-- Do not add generic recommendations merely to fill the field.
-- An empty list is acceptable when no useful additional check exists.
-
-DIAGNOSTIC VALIDATION:
-
-- Design checks to test whether a suspected cause actually exists.
-- Do not word a recommendation as though an unverified cause
-  has already been confirmed.
-- For suspected connection leaks, first investigate whether
-  connection acquisition and release counts differ, whether
-  connection hold durations increase, and whether active
-  connections remain occupied after requests complete.
-- For deployment-related correlation, compare relevant metrics
-  before and after deployment without assuming causation.
-- Explain what results would support or weaken the hypothesis.
+- Never recommend deleting data, restarting services, or
+  modifying production configurations.
+- Do not present an unverified cause as an established fact.
+- Explain what results would support or weaken a hypothesis.
+- Leave recommended_checks empty only when the evidence
+  contains no meaningful diagnostic signal that can guide
+  a useful, non-destructive investigation.
 
 7. UNKNOWNS
 
@@ -278,6 +278,10 @@ DIAGNOSTIC VALIDATION:
   further investigation.
 - Do not present uncertainty as a confirmed finding.
 - Keep unknowns distinct from recommended checks.
+- Describe missing information, not speculative explanations.
+- Do not list possible root causes as unknowns.
+- Identify specific missing measurements, events, or context
+  that would help resolve the investigation.
 
 8. INVESTIGATION QUALITY
 

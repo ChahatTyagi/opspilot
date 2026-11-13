@@ -7,6 +7,9 @@ from openai import OpenAI
 from app.ai_models import AIInvestigationResult
 from app.config import get_openai_api_key, get_openai_model
 from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
+from app.refinement_prompts import (
+    RECOMMENDATION_REFINEMENT_INSTRUCTIONS,
+)
 from app.tool_executor import InvestigationToolExecutor
 
 
@@ -48,6 +51,40 @@ def generate_investigation(
     if result is None:
         raise ValueError(
             "The LLM did not return a structured investigation result"
+        )
+
+    return result
+
+
+def refine_investigation_recommendations(
+    *,
+    incident_context: str,
+    draft_result: AIInvestigationResult,
+    client: OpenAI | None = None,
+) -> AIInvestigationResult:
+    """Refine recommendations without repeating evidence searches."""
+
+    if client is None:
+        client = create_openai_client()
+
+    refinement_input = {
+        "original_incident_context": incident_context,
+        "draft_investigation": draft_result.model_dump(mode="json"),
+    }
+
+    response = client.responses.parse(
+        model=get_openai_model(),
+        instructions=RECOMMENDATION_REFINEMENT_INSTRUCTIONS,
+        input=json.dumps(refinement_input),
+        text_format=AIInvestigationResult,
+        max_output_tokens=1200,
+    )
+
+    result = response.output_parsed
+
+    if result is None:
+        raise ValueError(
+            "The LLM did not return a refined investigation result"
         )
 
     return result
@@ -103,10 +140,8 @@ def generate_investigation_with_tools(
         text_format=AIInvestigationResult,
     )
 
-    # Enforce a total limit across all tool-call rounds.
     tool_call_count = 0
 
-    # Continue only while the model returns function-call items.
     while True:
         tool_calls = [
             item
@@ -127,7 +162,6 @@ def generate_investigation_with_tools(
 
             tool_call_count += 1
 
-            # Validate required metadata before parsing or executing the call.
             tool_name = getattr(tool_call, "name", None)
             raw_arguments = getattr(tool_call, "arguments", None)
             call_id = getattr(tool_call, "call_id", None)
@@ -141,7 +175,6 @@ def generate_investigation_with_tools(
             ):
                 raise ValueError("Malformed tool call returned by the LLM")
 
-            # Parse the tool arguments exactly once.
             try:
                 arguments = json.loads(raw_arguments)
             except (TypeError, json.JSONDecodeError) as exc:
@@ -149,8 +182,7 @@ def generate_investigation_with_tools(
                     "Invalid tool arguments returned by the LLM"
                 ) from exc
 
-            # Execute only after metadata and JSON arguments are validated.
-            result = executor.execute(
+            tool_result = executor.execute(
                 tool_name=tool_name,
                 arguments=arguments,
             )
@@ -159,7 +191,7 @@ def generate_investigation_with_tools(
                 {
                     "type": "function_call_output",
                     "call_id": call_id,
-                    "output": json.dumps(result),
+                    "output": json.dumps(tool_result),
                 }
             )
 
