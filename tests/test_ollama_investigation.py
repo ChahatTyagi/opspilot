@@ -11,6 +11,7 @@ from app.ai_models import (
     AIInvestigationResult,
 )
 from app.ollama_investigation import (
+    OLLAMA_TOOLS,
     generate_ollama_investigation_with_tools,
 )
 from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
@@ -109,18 +110,12 @@ def extract_tool_results(messages):
     ]
 
 
-def test_ollama_investigation_returns_structured_result():
+def test_ollama_returns_structured_result_after_tool_search():
     expected_result = make_result()
 
     mock_client = Mock()
     mock_client.chat.side_effect = [
         make_tool_response(),
-        {
-            "message": {
-                "role": "assistant",
-                "content": "Search completed.",
-            }
-        },
         make_final_response(expected_result),
     ]
 
@@ -135,7 +130,7 @@ def test_ollama_investigation_returns_structured_result():
     )
 
     assert result == expected_result
-    assert mock_client.chat.call_count == 3
+    assert mock_client.chat.call_count == 2
 
     executor.execute.assert_called_once_with(
         tool_name="search_incident_evidence",
@@ -143,18 +138,12 @@ def test_ollama_investigation_returns_structured_result():
     )
 
 
-def test_ollama_investigation_sends_tool_results_back():
+def test_ollama_sends_tool_results_back_to_model():
     expected_result = make_result()
 
     mock_client = Mock()
     mock_client.chat.side_effect = [
         make_tool_response(),
-        {
-            "message": {
-                "role": "assistant",
-                "content": "Search completed.",
-            }
-        },
         make_final_response(expected_result),
     ]
 
@@ -187,7 +176,7 @@ def test_ollama_investigation_sends_tool_results_back():
     assert tool_result["new_evidence_ids"] == [10]
 
 
-def test_ollama_investigation_passes_new_evidence_feedback():
+def test_ollama_passes_duplicate_evidence_feedback():
     expected_result = make_result()
 
     mock_client = Mock()
@@ -219,7 +208,7 @@ def test_ollama_investigation_passes_new_evidence_feedback():
     )
 
     tool_result = json.loads(
-        final_call_messages[-2]["content"]
+        final_call_messages[-1]["content"]
     )
 
     assert tool_result["new_evidence_ids"] == []
@@ -265,7 +254,7 @@ def test_ollama_stops_after_search_returns_only_duplicate_evidence():
     )
 
     second_tool_result = json.loads(
-        final_call_messages[-2]["content"]
+        final_call_messages[-1]["content"]
     )
 
     assert second_tool_result["results"][0]["evidence_id"] == 10
@@ -279,12 +268,6 @@ def test_ollama_continues_after_search_returns_no_results():
     mock_client.chat.side_effect = [
         make_tool_response("missing database information"),
         make_tool_response("database connection errors"),
-        {
-            "message": {
-                "role": "assistant",
-                "content": "Investigation complete.",
-            }
-        },
         make_final_response(expected_result),
     ]
 
@@ -307,7 +290,7 @@ def test_ollama_continues_after_search_returns_no_results():
 
     assert result == expected_result
     assert executor.execute.call_count == 2
-    assert mock_client.chat.call_count == 4
+    assert mock_client.chat.call_count == 3
 
 
 def test_ollama_investigation_rejects_malformed_tool_call():
@@ -470,9 +453,6 @@ def test_ollama_returns_result_for_remaining_calls_after_duplicate_evidence():
     )
 
     assert result == expected_result
-
-    # The initial search and first call in the second response execute.
-    # The remaining calls must not execute after duplicate-only results.
     assert executor.execute.call_count == 2
 
     final_messages = (
@@ -490,13 +470,12 @@ def test_ollama_returns_result_for_remaining_calls_after_duplicate_evidence():
 
     assert len(assistant_message["tool_calls"]) == 3
     assert len(tool_results) == 4
-    # The duplicate result is the third-last tool result.
+
     duplicate_result = json.loads(tool_results[-3]["content"])
 
     assert duplicate_result["ok"] is True
     assert duplicate_result["new_evidence_ids"] == []
 
-    # The final two searches must be rejected without execution.
     skipped_results = [
         json.loads(message["content"])
         for message in tool_results[-2:]
@@ -512,18 +491,11 @@ def test_ollama_returns_result_for_remaining_calls_after_duplicate_evidence():
 
 def test_ollama_investigation_rejects_invalid_final_json():
     mock_client = Mock()
-    mock_client.chat.side_effect = [
-        {
-            "message": {
-                "content": "No more tools needed.",
-            }
-        },
-        {
-            "message": {
-                "content": "This is not JSON",
-            }
-        },
-    ]
+    mock_client.chat.return_value = {
+        "message": {
+            "content": "This is not JSON",
+        }
+    }
 
     executor = Mock()
     executor.max_calls = 5
@@ -538,20 +510,58 @@ def test_ollama_investigation_rejects_invalid_final_json():
             client=mock_client,
         )
 
+    assert mock_client.chat.call_count == 1
+
+
+def test_ollama_uses_structured_first_response_without_reconstruction():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.return_value = make_final_response(expected_result)
+
+    executor = Mock()
+    executor.max_calls = 5
+
+    result = generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    assert result == expected_result
+    assert mock_client.chat.call_count == 1
+    executor.execute.assert_not_called()
+
+
+def test_ollama_first_call_includes_tools_and_json_schema():
+    expected_result = make_result()
+
+    mock_client = Mock()
+    mock_client.chat.return_value = make_final_response(expected_result)
+
+    executor = Mock()
+    executor.max_calls = 5
+
+    generate_ollama_investigation_with_tools(
+        incident_context="Incident context",
+        executor=executor,
+        client=mock_client,
+    )
+
+    first_call = mock_client.chat.call_args
+
+    assert first_call.kwargs["tools"] == OLLAMA_TOOLS
+    assert (
+        first_call.kwargs["format"]
+        == AIInvestigationResult.model_json_schema()
+    )
+
 
 def test_ollama_uses_shared_investigation_instructions():
     expected_result = make_result()
 
     mock_client = Mock()
-    mock_client.chat.side_effect = [
-        {
-            "message": {
-                "role": "assistant",
-                "content": "Investigation complete.",
-            }
-        },
-        make_final_response(expected_result),
-    ]
+    mock_client.chat.return_value = make_final_response(expected_result)
 
     executor = Mock()
     executor.max_calls = 5

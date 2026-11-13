@@ -44,6 +44,33 @@ OLLAMA_TOOLS = [
 ]
 
 
+def _parse_investigation_response(
+    response: dict,
+) -> AIInvestigationResult:
+    """Parse and validate a structured Ollama investigation response."""
+
+    message = response.get("message")
+
+    if not isinstance(message, dict):
+        raise ValueError(
+            "Ollama returned a malformed investigation response"
+        )
+
+    content = message.get("content")
+
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError(
+            "Ollama did not return a structured investigation result"
+        )
+
+    try:
+        return AIInvestigationResult.model_validate_json(content)
+    except (ValueError, ValidationError) as exc:
+        raise ValueError(
+            "Ollama returned an invalid structured investigation result"
+        ) from exc
+
+
 def refine_ollama_investigation_recommendations(
     *,
     incident_context: str,
@@ -76,19 +103,9 @@ def refine_ollama_investigation_recommendations(
         format=AIInvestigationResult.model_json_schema(),
     )
 
-    content = response["message"].get("content")
+    return _parse_investigation_response(response)
 
-    if not isinstance(content, str) or not content.strip():
-        raise ValueError(
-            "Ollama did not return a refined investigation result"
-        )
 
-    try:
-        return AIInvestigationResult.model_validate_json(content)
-    except (ValueError, ValidationError) as exc:
-        raise ValueError(
-            "Ollama returned an invalid refined investigation result"
-        ) from exc
 
 
 def generate_ollama_investigation_with_tools(
@@ -119,21 +136,25 @@ def generate_ollama_investigation_with_tools(
         response = client.chat(
             messages=list(messages),
             tools=OLLAMA_TOOLS,
+            format=AIInvestigationResult.model_json_schema(),
         )
 
-        message = response["message"]
+        message = response.get("message")
+
+        if not isinstance(message, dict):
+            raise ValueError(
+                "Ollama returned a malformed investigation response"
+            )
+
         tool_calls = message.get("tool_calls", [])
 
         if not isinstance(tool_calls, list):
-            raise ValueError(
-                "Ollama returned malformed tool calls"
-            )
+            raise ValueError("Ollama returned malformed tool calls")
 
         if not tool_calls:
-            break
+            return _parse_investigation_response(response)
 
         messages.append(message)
-
         stop_searching = False
 
         for tool_call in tool_calls:
@@ -206,34 +227,9 @@ def generate_ollama_investigation_with_tools(
                 stop_searching = True
 
         if stop_searching or tool_call_count >= executor.max_calls:
-            break
+            final_response = client.chat(
+                messages=list(messages),
+                format=AIInvestigationResult.model_json_schema(),
+            )
 
-    messages.append({
-        "role": "user",
-        "content": (
-            "Now produce the final incident investigation. "
-            "Use only the original incident evidence and the "
-            "evidence returned by the tools. Do not treat previous "
-            "assistant-generated text as evidence. Return only the "
-            "structured investigation requested by the JSON schema."
-        ),
-    })
-
-    final_response = client.chat(
-        messages=list(messages),
-        format=AIInvestigationResult.model_json_schema(),
-    )
-
-    content = final_response["message"].get("content")
-
-    if not isinstance(content, str) or not content.strip():
-        raise ValueError(
-            "Ollama did not return a structured investigation result"
-        )
-
-    try:
-        return AIInvestigationResult.model_validate_json(content)
-    except (ValueError, ValidationError) as exc:
-        raise ValueError(
-            "Ollama returned an invalid structured investigation result"
-        ) from exc
+            return _parse_investigation_response(final_response)
