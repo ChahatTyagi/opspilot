@@ -137,9 +137,17 @@ IMPORTANT DISTINCTIONS:
 - Do not introduce alternative explanations such as traffic spikes,
   dependency failures, or resource shortages unless evidence or
   incident context provides a reason to investigate them.
-- If an explanation is plausible but has no direct supporting
-  evidence, identify it as an unverified possibility and use LOW
-  confidence.
+- Every hypothesis must have specific evidence supporting the
+  proposed causal explanation, not merely the reported symptom.
+- Evidence of an error, failure, or increased error rate alone
+  does not establish why that symptom occurred.
+- LOW confidence must not be used to justify an explanation
+  that has no supporting evidence.
+- If a possible cause has no specific supporting evidence,
+  do not include it in hypotheses. Instead, identify the missing
+  information in unknowns and suggest relevant diagnostic checks.
+- An empty hypotheses list is valid and preferred when the
+  available evidence does not support a causal explanation.
 - Prefer one well-supported hypothesis over several speculative
   alternatives.
 - Do not treat a warning, suspicion, or suggested investigation
@@ -159,8 +167,11 @@ CAUSAL REASONING CHECK:
 - For example, connection pool exhaustion does not prove that
   connections were leaked or that a particular code path
   failed to release them.
-- If a suspected mechanism has not been directly observed,
-  describe it as a possibility and assign LOW confidence.
+- If a suspected mechanism is supported by relevant indirect
+  evidence but has not been directly observed, describe it as
+  a possibility and assign LOW confidence.
+- If no relevant evidence supports the suspected mechanism,
+  do not include it as a hypothesis.
 - Do not assume a deployment introduced a code defect solely
   because failures increased after that deployment.
 

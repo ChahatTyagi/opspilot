@@ -81,12 +81,39 @@ def test_prompt_requires_low_confidence_without_direct_causation():
     )
 
 
-def test_prompt_restricts_unsupported_alternatives():
+def test_prompt_rejects_hypotheses_based_only_on_symptoms():
+    normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
+
     assert (
-        "Do not introduce speculative explanations such as traffic spikes"
-        in INVESTIGATION_INSTRUCTIONS
+        "not merely the reported symptom"
+        in normalized_prompt
+    )
+    assert (
+        "Evidence of an error, failure, or increased error rate alone"
+        in normalized_prompt
     )
 
+
+def test_prompt_allows_empty_hypotheses_when_evidence_is_insufficient():
+    normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
+
+    assert (
+        "An empty hypotheses list is valid and preferred"
+        in normalized_prompt
+    )
+
+
+def test_prompt_distinguishes_unsupported_from_indirectly_supported_causes():
+    normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
+
+    assert (
+        "supported by relevant indirect evidence"
+        in normalized_prompt
+    )
+    assert (
+        "If no relevant evidence supports the suspected mechanism,"
+        in normalized_prompt
+    )
 
 def test_prompt_calibrates_connection_pool_saturation_as_low():
     normalized_prompt = " ".join(INVESTIGATION_INSTRUCTIONS.split())
