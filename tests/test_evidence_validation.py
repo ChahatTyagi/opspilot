@@ -1,16 +1,20 @@
+
 import pytest
 
 from app.ai_models import (
     AIConfidence,
     AIFact,
     AIHypothesis,
+    AIHypothesisAssessment,
+    AIHypothesisVerdict,
     AIInvestigationResult,
+    AIHypothesisVerificationResult,
 )
 from app.evidence_validation import (
     validate_evidence_references,
+    validate_hypothesis_verification,
     validate_investigation_quality,
 )
-
 
 
 def make_result():
@@ -28,6 +32,20 @@ def make_result():
                 confidence=AIConfidence.MEDIUM,
             )
         ],
+    )
+
+
+def make_assessment(
+    index=0,
+    verdict=AIHypothesisVerdict.SUPPORTED,
+    evidence_ids=None,
+    rationale="The cited evidence supports the proposed mechanism.",
+):
+    return AIHypothesisAssessment(
+        hypothesis_index=index,
+        verdict=verdict,
+        evidence_ids=[11] if evidence_ids is None else evidence_ids,
+        rationale=rationale,
     )
 
 
@@ -156,3 +174,189 @@ def test_allows_legitimately_empty_lists():
     result.unknowns = []
 
     assert validate_investigation_quality(result) is result
+
+
+def test_keeps_supported_hypothesis():
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[make_assessment()]
+    )
+
+    validated = validate_hypothesis_verification(
+        result=result,
+        verification=verification,
+        valid_evidence_ids={10, 11, 12},
+    )
+
+    assert validated.hypotheses == result.hypotheses
+
+
+@pytest.mark.parametrize(
+    "verdict",
+    [
+        AIHypothesisVerdict.INSUFFICIENT,
+        AIHypothesisVerdict.CONTRADICTED,
+    ],
+)
+def test_removes_unsupported_hypotheses(verdict):
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(verdict=verdict)
+        ]
+    )
+
+    validated = validate_hypothesis_verification(
+        result=result,
+        verification=verification,
+        valid_evidence_ids={10, 11, 12},
+    )
+
+    assert validated.hypotheses == []
+
+
+def test_rejects_missing_assessment():
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult()
+
+    with pytest.raises(ValueError, match="exactly one assessment"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_rejects_duplicate_assessment():
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(),
+            make_assessment(),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="exactly one assessment"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_rejects_out_of_range_index():
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[make_assessment(index=5)]
+    )
+
+    with pytest.raises(ValueError, match="out-of-range"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_rejects_evidence_not_cited_by_hypothesis():
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(evidence_ids=[10])
+        ]
+    )
+
+    with pytest.raises(ValueError, match="not cited"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_rejects_blank_rationale():
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(rationale="   ")
+        ]
+    )
+
+    with pytest.raises(ValueError, match="blank"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_rejects_hypothesis_without_supporting_evidence():
+    result = make_result()
+    result.hypotheses[0].supporting_evidence_ids = []
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.INSUFFICIENT,
+                evidence_ids=[],
+                rationale="No evidence was cited.",
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="without supporting evidence"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_rejects_supported_verdict_without_evidence_ids():
+    result = make_result()
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(evidence_ids=[])
+        ]
+    )
+
+    with pytest.raises(ValueError, match="must cite supporting evidence"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
+
+
+def test_preserves_other_investigation_fields_when_filtering():
+    result = make_result()
+    result.unknowns = ["The exact cause remains unknown."]
+    result.recommended_checks = ["Inspect connection usage."]
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(
+                verdict=AIHypothesisVerdict.INSUFFICIENT
+            )
+        ]
+    )
+
+    validated = validate_hypothesis_verification(
+        result=result,
+        verification=verification,
+        valid_evidence_ids={10, 11, 12},
+    )
+
+    assert validated.hypotheses == []
+    assert validated.observed_facts == result.observed_facts
+    assert validated.unknowns == result.unknowns
+    assert validated.recommended_checks == result.recommended_checks

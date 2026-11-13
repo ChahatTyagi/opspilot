@@ -8,14 +8,18 @@ from app.ai_models import (
     AIFact,
     AIHypothesis,
     AIInvestigationResult,
+    AIHypothesisAssessment,
+    AIHypothesisVerdict,
+    AIHypothesisVerificationResult,
 )
 from app.llm_client import (
     LLMConfigurationError,
     create_openai_client,
     generate_investigation,
     generate_investigation_with_tools,
+    verify_openai_hypotheses,
 )
-
+from app.verification_prompts import HYPOTHESIS_VERIFICATION_INSTRUCTIONS
 from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
 def make_result():
     return AIInvestigationResult(
@@ -374,3 +378,177 @@ def test_generate_investigation_with_tools_uses_shared_instructions(
             call.kwargs["instructions"]
             == expected_instructions
         )
+
+
+
+def make_verification_result():
+    return AIHypothesisVerificationResult(
+        assessments=[
+            AIHypothesisAssessment(
+                hypothesis_index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[10],
+                rationale=(
+                    "The cited evidence contains observations "
+                    "supporting the proposed mechanism."
+                ),
+            )
+        ]
+    )
+
+
+def test_verify_openai_hypotheses_returns_parsed_result(monkeypatch):
+    expected_result = make_verification_result()
+    mock_client = Mock()
+
+    mock_client.responses.parse.return_value = SimpleNamespace(
+        output_parsed=expected_result
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_verifier_model",
+        lambda: "independent-verifier-model",
+    )
+
+    verification_input = {
+        "hypotheses": [
+            {
+                "hypothesis_index": 0,
+                "explanation": "Connection saturation may be involved.",
+                "confidence": "medium",
+                "cited_evidence": [
+                    {
+                        "evidence_id": 10,
+                        "source_type": "log",
+                        "content": "Connection pool usage reached 100%.",
+                    }
+                ],
+            }
+        ]
+    }
+
+    result = verify_openai_hypotheses(
+        verification_input=verification_input,
+        client=mock_client,
+    )
+
+    assert result is expected_result
+    mock_client.responses.parse.assert_called_once()
+
+
+def test_verify_openai_hypotheses_uses_verifier_model_and_instructions(
+    monkeypatch,
+):
+    mock_client = Mock()
+
+    mock_client.responses.parse.return_value = SimpleNamespace(
+        output_parsed=make_verification_result()
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_verifier_model",
+        lambda: "independent-verifier-model",
+    )
+
+    verify_openai_hypotheses(
+        verification_input={"hypotheses": []},
+        client=mock_client,
+    )
+
+    call_kwargs = mock_client.responses.parse.call_args.kwargs
+
+    assert call_kwargs["model"] == "independent-verifier-model"
+    assert call_kwargs["instructions"] == (
+        HYPOTHESIS_VERIFICATION_INSTRUCTIONS
+    )
+    assert call_kwargs["text_format"] is AIHypothesisVerificationResult
+    assert call_kwargs["max_output_tokens"] == 1200
+
+
+def test_verify_openai_hypotheses_serializes_verification_input(
+    monkeypatch,
+):
+    mock_client = Mock()
+
+    mock_client.responses.parse.return_value = SimpleNamespace(
+        output_parsed=make_verification_result()
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_verifier_model",
+        lambda: "independent-verifier-model",
+    )
+
+    verification_input = {
+        "hypotheses": [
+            {
+                "hypothesis_index": 0,
+                "explanation": "Connection saturation may be involved.",
+                "cited_evidence": [
+                    {
+                        "evidence_id": 10,
+                        "content": "Connection pool usage reached 100%.",
+                    }
+                ],
+            }
+        ]
+    }
+
+    verify_openai_hypotheses(
+        verification_input=verification_input,
+        client=mock_client,
+    )
+
+    call_kwargs = mock_client.responses.parse.call_args.kwargs
+
+    assert json.loads(call_kwargs["input"]) == verification_input
+
+
+def test_verify_openai_hypotheses_rejects_empty_parsed_response(
+    monkeypatch,
+):
+    mock_client = Mock()
+
+    mock_client.responses.parse.return_value = SimpleNamespace(
+        output_parsed=None
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_verifier_model",
+        lambda: "independent-verifier-model",
+    )
+
+    with pytest.raises(ValueError, match="structured verification"):
+        verify_openai_hypotheses(
+            verification_input={"hypotheses": []},
+            client=mock_client,
+        )
+
+
+def test_verify_openai_hypotheses_does_not_use_investigation_model(
+    monkeypatch,
+):
+    mock_client = Mock()
+
+    mock_client.responses.parse.return_value = SimpleNamespace(
+        output_parsed=make_verification_result()
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_verifier_model",
+        lambda: "independent-verifier-model",
+    )
+
+    monkeypatch.setattr(
+        "app.llm_client.get_openai_model",
+        lambda: "investigation-model",
+    )
+
+    verify_openai_hypotheses(
+        verification_input={"hypotheses": []},
+        client=mock_client,
+    )
+
+    call_kwargs = mock_client.responses.parse.call_args.kwargs
+
+    assert call_kwargs["model"] == "independent-verifier-model"

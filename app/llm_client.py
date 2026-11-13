@@ -4,13 +4,23 @@ from typing import Any
 
 from openai import OpenAI
 
-from app.ai_models import AIInvestigationResult
-from app.config import get_openai_api_key, get_openai_model
+from app.ai_models import (
+    AIHypothesisVerificationResult,
+    AIInvestigationResult,
+)
+from app.config import (
+    get_openai_api_key,
+    get_openai_model,
+    get_verifier_model,
+)
 from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
 from app.refinement_prompts import (
     RECOMMENDATION_REFINEMENT_INSTRUCTIONS,
 )
 from app.tool_executor import InvestigationToolExecutor
+from app.verification_prompts import (
+    HYPOTHESIS_VERIFICATION_INSTRUCTIONS,
+)
 
 
 class LLMConfigurationError(RuntimeError):
@@ -85,6 +95,34 @@ def refine_investigation_recommendations(
     if result is None:
         raise ValueError(
             "The LLM did not return a refined investigation result"
+        )
+
+    return result
+
+
+def verify_openai_hypotheses(
+    *,
+    verification_input: dict[str, Any],
+    client: OpenAI | None = None,
+) -> AIHypothesisVerificationResult:
+    """Independently verify hypotheses using a configured OpenAI model."""
+
+    if client is None:
+        client = create_openai_client()
+
+    response = client.responses.parse(
+        model=get_verifier_model(),
+        instructions=HYPOTHESIS_VERIFICATION_INSTRUCTIONS,
+        input=json.dumps(verification_input),
+        text_format=AIHypothesisVerificationResult,
+        max_output_tokens=1200,
+    )
+
+    result = response.output_parsed
+
+    if result is None:
+        raise ValueError(
+            "The LLM did not return a structured verification result"
         )
 
     return result

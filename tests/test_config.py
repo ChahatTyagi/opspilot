@@ -3,6 +3,7 @@ import pytest
 
 from app.config import (
     get_llm_provider,
+    get_verifier_model,
     get_openai_api_key,
     get_openai_model,
     get_ollama_base_url,
@@ -55,6 +56,46 @@ def test_llm_provider_is_normalized(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", " OLLAMA ")
 
     assert get_llm_provider() == "ollama"
+
+
+# Verifier model tests
+
+def test_verifier_model_defaults_to_openai_model(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_MODEL", "test-openai-model")
+    monkeypatch.delenv("VERIFIER_MODEL", raising=False)
+
+    assert get_verifier_model() == "test-openai-model"
+
+
+def test_verifier_model_defaults_to_ollama_model(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "test-ollama-model")
+    monkeypatch.delenv("VERIFIER_MODEL", raising=False)
+
+    assert get_verifier_model() == "test-ollama-model"
+
+
+def test_verifier_model_can_be_configured_independently(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "investigation-model")
+    monkeypatch.setenv("VERIFIER_MODEL", "verification-model")
+
+    assert get_verifier_model() == "verification-model"
+
+
+def test_verifier_model_strips_whitespace(monkeypatch):
+    monkeypatch.setenv("VERIFIER_MODEL", "  verification-model  ")
+
+    assert get_verifier_model() == "verification-model"
+
+
+def test_blank_verifier_model_uses_provider_default(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "investigation-model")
+    monkeypatch.setenv("VERIFIER_MODEL", "   ")
+
+    assert get_verifier_model() == "investigation-model"
 
 
 def test_ollama_base_url_has_default(monkeypatch):
@@ -151,7 +192,6 @@ def test_ollama_num_ctx_rejects_invalid_values(monkeypatch, value):
 
     with pytest.raises(ValueError):
         get_ollama_num_ctx()
-
 
 
 # Embedding provider tests
