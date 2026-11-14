@@ -16,20 +16,50 @@ from app.verification_prompts import (
 )
 
 
-_CORRECTIVE_RETRY_INSTRUCTIONS = """
+def _build_verification_schema() -> dict:
+    """Build a verifier-specific schema requiring evidence_ids."""
 
+    schema = AIHypothesisVerificationResult.model_json_schema()
+
+    assessment_schema = schema["$defs"]["AIHypothesisAssessment"]
+
+    required_fields = assessment_schema.setdefault("required", [])
+
+    if "evidence_ids" not in required_fields:
+        required_fields.append("evidence_ids")
+
+    return schema
+
+
+_CORRECTIVE_RETRY_INSTRUCTIONS = """
 CORRECTIVE RETRY REQUIREMENTS
 
-Your previous response did not pass deterministic validation. Re-evaluate
-this same single hypothesis using only the evidence supplied in the user
-payload. Return exactly one assessment with hypothesis_index 0.
+Your previous response failed deterministic validation.
 
-If and only if you return SUPPORTED, evidence_ids MUST contain at least one
-integer ID copied exactly from the cited_evidence list. Never leave that
-list empty for SUPPORTED. Every ID explicitly named in the rationale must
-also appear in evidence_ids. Do not invent IDs. If the evidence does not
-support the proposed cause, choose INSUFFICIENT instead of manufacturing
-supporting citations. Return only the required JSON structure.
+Re-evaluate the same single hypothesis using only the evidence
+supplied in the user payload.
+
+Return exactly one assessment with hypothesis_index 0.
+
+STRICT FIELD SEPARATION:
+
+- Put relevant numeric evidence IDs only in evidence_ids.
+- Never write evidence record IDs in rationale.
+- Do not write phrases such as "Evidence 241" or "Evidence ID 242".
+- Explain observations directly without mentioning record numbers.
+- For an INSUFFICIENT verdict, use an empty evidence_ids array.
+- For a SUPPORTED verdict, include at least one genuinely
+  supporting evidence ID.
+- For a CONTRADICTED verdict, include evidence IDs that directly
+  conflict with the proposed causal mechanism.
+
+Before returning, check:
+1. Every evidence ID is supplied for this hypothesis.
+2. Every evidence ID is in the structured evidence_ids array.
+3. The rationale contains no evidence record identifiers.
+4. The verdict and citations agree with the supplied observations.
+
+Return only the structured assessment.
 """
 
 
@@ -141,10 +171,13 @@ def _request_assessment(
     client: OllamaClient,
     messages: list[dict],
 ) -> AIHypothesisVerificationResult:
+    """Request one assessment using the verifier-specific JSON schema."""
+
     response = client.chat(
         messages=messages,
-        format=AIHypothesisVerificationResult.model_json_schema(),
+        format=_build_verification_schema(),
     )
+
     return _parse_verification_response(response)
 
 
@@ -181,6 +214,7 @@ def verify_ollama_hypotheses(
             "role": "user",
             "content": json.dumps(verification_input),
         }
+
         messages = [
             {
                 "role": "system",
@@ -265,7 +299,9 @@ def verify_ollama_hypotheses(
             except ValueError as retry_error:
                 raise ValueError(
                     "Ollama verifier returned an invalid assessment "
-                    "after one corrective retry."
+                    "after one corrective retry. "
+                    f"First attempt error: {first_error}. "
+                    f"Corrective retry error: {retry_error}"
                 ) from retry_error
 
         # The model sees one hypothesis, so its local index is zero.
@@ -273,6 +309,7 @@ def verify_ollama_hypotheses(
         restored_assessment = assessment.model_copy(
             update={"hypothesis_index": original_index}
         )
+
         all_assessments.append(restored_assessment)
 
     return AIHypothesisVerificationResult(assessments=all_assessments)

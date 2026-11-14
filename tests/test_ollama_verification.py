@@ -13,9 +13,11 @@ from app.ai_models import (
 )
 from app.ollama_verification import (
     build_verification_input,
+    _build_verification_schema,
     _parse_verification_response,
     verify_ollama_hypotheses,
 )
+
 
 
 def make_hypothesis():
@@ -87,6 +89,29 @@ class FakeOllamaClient:
             return self.responses.pop(0)
 
         return self.response
+
+
+def test_verification_schema_requires_evidence_ids_without_changing_shared_schema():
+    original_schema = AIHypothesisVerificationResult.model_json_schema()
+
+    verification_schema = _build_verification_schema()
+
+    assessment_schema = verification_schema["$defs"][
+        "AIHypothesisAssessment"
+    ]
+
+    assert "evidence_ids" in assessment_schema["required"]
+
+    original_assessment_schema = original_schema["$defs"][
+        "AIHypothesisAssessment"
+    ]
+
+    assert "evidence_ids" not in original_assessment_schema["required"]
+
+    assert (
+        AIHypothesisVerificationResult.model_json_schema()
+        == original_schema
+    )
 
 
 def test_builds_input_with_actual_cited_evidence():
@@ -236,9 +261,11 @@ def test_calls_verifier_with_structured_output():
         == "Database connection pool usage reached 100%."
     )
 
-    assert call["format"] == (
-        AIHypothesisVerificationResult.model_json_schema()
-    )
+    assessment_schema = call["format"]["$defs"][
+    "AIHypothesisAssessment"
+    ]
+    assert "evidence_ids" in assessment_schema["required"]
+
 
 
 def test_verifies_multiple_hypotheses_in_separate_requests():

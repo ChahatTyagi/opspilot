@@ -10,6 +10,9 @@ Run repeated trials:
 Run a smaller initial smoke test:
     python -m experiments.evaluate_hypothesis_verifier --limit 3
 
+Run selected diagnostic cases:
+    python -m experiments.evaluate_hypothesis_verifier --case-ids INS-02 INS-04 CON-07
+
 The benchmark calls the production Ollama verifier and then applies the
 production hypothesis-evidence validation rules to each assessment.
 It does not exercise the complete investigation pipeline.
@@ -17,9 +20,11 @@ It does not exercise the complete investigation pipeline.
 IMPORTANT:
     --limit selects the first N cases, not a balanced sample.
     Use it only for smoke tests, not for reporting final accuracy.
-"""
 
-from __future__ import annotations
+    --case-ids selects specific cases for targeted diagnostics.
+    A targeted run is not a balanced sample and should not be used
+    for reporting final benchmark accuracy.
+"""
 
 import argparse
 import json
@@ -40,6 +45,7 @@ from app.ai_models import (
 )
 from app.config import get_verifier_model
 from app.evidence_validation import validate_hypothesis_verification
+from app.ollama_client import OllamaClient
 from app.ollama_verification import verify_ollama_hypotheses
 
 
@@ -56,12 +62,78 @@ DEFAULT_OUTPUT = (
     / "hypothesis_verifier_benchmark_v3.json"
 )
 
+DEFAULT_RAW_DIAGNOSTIC_OUTPUT = (
+    PROJECT_ROOT
+    / "experiments"
+    / "results"
+    / "hypothesis_verifier_raw_diagnostic.json"
+)
+
 VERDICTS = (
     AIHypothesisVerdict.SUPPORTED.value,
     AIHypothesisVerdict.INSUFFICIENT.value,
     AIHypothesisVerdict.CONTRADICTED.value,
 )
 
+
+# ---------------------------------------------------------------------
+# Diagnostic recording client
+# ---------------------------------------------------------------------
+
+class RecordingOllamaClient(OllamaClient):
+    """Record raw Ollama responses during targeted benchmark runs."""
+
+    def __init__(
+        self,
+        *,
+        case_id: str,
+        run_number: int,
+        records: list[dict[str, Any]],
+    ) -> None:
+        super().__init__(
+            model=get_verifier_model(),
+        )
+
+        self.case_id = case_id
+        self.run_number = run_number
+        self.records = records
+        self.attempt_number = 0
+
+    def chat(
+        self,
+        *,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        format: dict | None = None,
+    ) -> dict:
+        self.attempt_number += 1
+
+        record = {
+            "case_id": self.case_id,
+            "run_number": self.run_number,
+            "attempt_number": self.attempt_number,
+            "model": self.model,
+        }
+
+        try:
+            response = super().chat(
+                messages=messages,
+                tools=tools,
+                format=format,
+            )
+
+        except Exception as exc:
+            record["request_error"] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+            self.records.append(record)
+            raise
+
+        record["response"] = response
+
+        self.records.append(record)
+
+        return response
 
 # ---------------------------------------------------------------------
 # Benchmark data structures
@@ -409,6 +481,7 @@ def build_benchmark_cases() -> list[BenchmarkCase]:
             ),
             expected_evidence_ids=(),
         ),
+
 
         BenchmarkCase(
             case_id="INS-04",
@@ -846,8 +919,9 @@ def validate_benchmark_cases(
 def evaluate_case(
     case: BenchmarkCase,
     run_number: int,
+    raw_diagnostic_records: list[dict[str, Any]] | None = None,
 ) -> CaseResult:
-    """Call the actual production verifier for one benchmark case."""
+    """Call the production verifier for one benchmark case."""
 
     hypothesis = AIHypothesis(
         explanation=case.hypothesis,
@@ -859,10 +933,20 @@ def evaluate_case(
 
     start = time.perf_counter()
 
+    recording_client = None
+
+    if raw_diagnostic_records is not None:
+        recording_client = RecordingOllamaClient(
+            case_id=case.case_id,
+            run_number=run_number,
+            records=raw_diagnostic_records,
+        )
+
     try:
         verification = verify_ollama_hypotheses(
             hypotheses=[hypothesis],
             evidence=list(case.evidence),
+            client=recording_client,
         )
 
         latency = time.perf_counter() - start
@@ -911,8 +995,7 @@ def evaluate_case(
             )
 
         # Preserve the raw model verdict even if production validation
-        # rejects the assessment. This separates model classification
-        # quality from whether OpsPilot can safely use the result.
+        # rejects the assessment.
         production_validation_error = None
 
         try:
@@ -925,20 +1008,23 @@ def evaluate_case(
                     item.id for item in case.evidence
                 },
             )
+
             production_validation_passed = True
             production_usable_verdict = actual_verdict
+
             production_usable_verdict_correct = (
                 actual_verdict == case.expected_verdict
             )
+
         except ValueError as validation_exc:
             production_validation_passed = False
+
             production_validation_error = (
                 f"{type(validation_exc).__name__}: "
                 f"{validation_exc}"
             )
+
             production_usable_verdict = None
-            # A rejected assessment cannot count as a production-usable
-            # correct verdict, even when its raw classification was right.
             production_usable_verdict_correct = False
 
         return CaseResult(
@@ -1361,7 +1447,7 @@ def print_report(
 
     production_validation = metrics["production_validation"]
 
-    print("\\nPRODUCTION VALIDATION")
+    print("\nPRODUCTION VALIDATION")
     print("-" * 68)
     print(
         "Assessments accepted:",
@@ -1464,6 +1550,7 @@ def print_report(
 # Command-line arguments
 # ---------------------------------------------------------------------
 
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -1492,6 +1579,16 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--case-ids",
+        nargs="+",
+        default=None,
+        help=(
+            "Evaluate only the specified benchmark case IDs. "
+            "Example: --case-ids INS-02 INS-04 CON-07"
+        ),
+    )
+
+    parser.add_argument(
         "--output",
         type=Path,
         default=DEFAULT_OUTPUT,
@@ -1501,13 +1598,23 @@ def parse_arguments() -> argparse.Namespace:
         ),
     )
 
+    parser.add_argument(
+        "--raw-output",
+        type=Path,
+        default=DEFAULT_RAW_DIAGNOSTIC_OUTPUT,
+        help=(
+            "Path to the raw Ollama diagnostic JSON file "
+            "used for targeted runs."
+        ),
+    )
+
     return parser.parse_args()
+
 
 
 # ---------------------------------------------------------------------
 # Main execution
 # ---------------------------------------------------------------------
-
 
 def main() -> None:
     args = parse_arguments()
@@ -1515,8 +1622,26 @@ def main() -> None:
     if args.runs < 1:
         raise SystemExit("--runs must be at least 1.")
 
-    # Resolve and check the output path BEFORE any model evaluations.
+    if args.case_ids is not None and args.limit is not None:
+        raise SystemExit(
+            "Use either --case-ids or --limit, not both."
+        )
+
+    # Resolve output paths before model evaluations.
     output_path = args.output.resolve()
+
+    diagnostic_enabled = args.case_ids is not None
+
+    diagnostic_output_path = args.raw_output.resolve()
+
+    # The benchmark summary and raw diagnostic must be separate files.
+    if (
+        diagnostic_enabled
+        and output_path == diagnostic_output_path
+    ):
+        raise SystemExit(
+            "--output and --raw-output must be different files."
+        )
 
     if output_path.exists():
         raise SystemExit(
@@ -1525,7 +1650,48 @@ def main() -> None:
             "Choose another path using --output."
         )
 
+    if (
+        diagnostic_enabled
+        and diagnostic_output_path.exists()
+    ):
+        raise SystemExit(
+            "Raw diagnostic output already exists; "
+            "refusing to overwrite it:\n"
+            f"{diagnostic_output_path}"
+        )
+
+
     cases = build_benchmark_cases()
+
+    if args.case_ids is not None:
+        requested_ids = args.case_ids
+
+        if len(requested_ids) != len(set(requested_ids)):
+            raise SystemExit(
+                "--case-ids contains duplicate case IDs."
+            )
+
+        available_cases = {
+            case.case_id: case
+            for case in cases
+        }
+
+        unknown_ids = [
+            case_id
+            for case_id in requested_ids
+            if case_id not in available_cases
+        ]
+
+        if unknown_ids:
+            raise SystemExit(
+                f"Unknown benchmark case IDs: {unknown_ids}"
+            )
+
+        # Preserve the order supplied by the user.
+        cases = [
+            available_cases[case_id]
+            for case_id in requested_ids
+        ]
 
     if args.limit is not None:
         if args.limit < 1:
@@ -1542,6 +1708,11 @@ def main() -> None:
 
     total_evaluations = len(cases) * args.runs
 
+    # Raw responses are recorded only for targeted diagnostic runs.
+    raw_diagnostic_records: list[dict[str, Any]] | None = (
+        [] if diagnostic_enabled else None
+    )
+
     print("=" * 68)
     print("Starting OpsPilot hypothesis verifier benchmark")
     print(f"Verifier model: {model}")
@@ -1553,6 +1724,26 @@ def main() -> None:
         print(
             "WARNING: --limit selects the first N cases only. "
             "Do not use this run for final benchmark accuracy."
+        )
+
+    if diagnostic_enabled:
+        print(
+            "TARGETED DIAGNOSTIC RUN: "
+            "Evaluating selected cases only."
+        )
+
+        print(
+            "Selected case IDs:",
+            ", ".join(case.case_id for case in cases),
+        )
+
+        print(
+            "WARNING: This targeted run is not a balanced sample. "
+            "Do not use it for final benchmark accuracy."
+        )
+
+        print(
+            "Raw response recording is enabled."
         )
 
     print("=" * 68)
@@ -1575,6 +1766,7 @@ def main() -> None:
             result = evaluate_case(
                 case=case,
                 run_number=run_number,
+                raw_diagnostic_records=raw_diagnostic_records,
             )
 
             all_results.append(result)
@@ -1585,6 +1777,7 @@ def main() -> None:
                     f"{result.error}",
                     flush=True,
                 )
+
             else:
                 if result.production_validation_passed is False:
                     status = (
@@ -1592,6 +1785,7 @@ def main() -> None:
                         if result.verdict_correct
                         else "MISMATCH + INVALID"
                     )
+
                 else:
                     status = (
                         "PASS"
@@ -1631,8 +1825,7 @@ def main() -> None:
         exist_ok=True,
     )
 
-    # Exclusive creation prevents overwriting a file that appeared
-    # after the initial existence check.
+    # Save the regular benchmark report without overwriting files.
     try:
         with output_path.open(
             "x",
@@ -1649,8 +1842,54 @@ def main() -> None:
         raise SystemExit(
             "Output file appeared during benchmark execution; "
             "refusing to overwrite it:\n"
-            f"{output_path}\n\n"
-            "Choose another path using --output."
+            f"{output_path}"
+        )
+
+    # Save raw Ollama responses separately for targeted diagnostics.
+    if raw_diagnostic_records is not None:
+        diagnostic_report = {
+            "benchmark": (
+                "OpsPilot Hypothesis Verifier Raw Diagnostic"
+            ),
+            "generated_at": datetime.now(
+                timezone.utc
+            ).isoformat(),
+            "model": model,
+            "case_ids": [
+                case.case_id for case in cases
+            ],
+            "runs_per_case": args.runs,
+            "response_count": len(raw_diagnostic_records),
+            "responses": raw_diagnostic_records,
+        }
+
+        diagnostic_output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        try:
+            with diagnostic_output_path.open(
+                "x",
+                encoding="utf-8",
+            ) as diagnostic_file:
+                json.dump(
+                    diagnostic_report,
+                    diagnostic_file,
+                    indent=2,
+                    ensure_ascii=False,
+                )
+
+        except FileExistsError:
+            raise SystemExit(
+                "Raw diagnostic file appeared during benchmark "
+                "execution; refusing to overwrite it:\n"
+                f"{diagnostic_output_path}"
+            )
+
+        print(
+            "\nRaw model responses saved to:\n"
+            f"{diagnostic_output_path}"
         )
 
     print_report(
