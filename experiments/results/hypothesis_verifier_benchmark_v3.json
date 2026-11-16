@@ -1,0 +1,683 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-13T19:51:12.112960+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 24,
+  "evaluation_count": 24,
+  "metrics": {
+    "unique_benchmark_cases": 24,
+    "total_evaluations": 24,
+    "successful_evaluations": 18,
+    "failed_evaluations": 6,
+    "execution_success_rate_percent": 75.0,
+    "verdict_accuracy_percent": 94.44,
+    "correct_verdicts": 17,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 8,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 3,
+        "contradicted": 1
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 6
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 10,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 8,
+      "rate_percent": 0.0
+    },
+    "production_validation": {
+      "evaluated_assessments": 18,
+      "accepted_assessments": 18,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 94.44,
+      "production_usable_correct_verdicts": 17,
+      "production_usable_accuracy_denominator": 18
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 96.43,
+      "mean_case_level_recall_percent": 100.0,
+      "exact_match_count": 13,
+      "evaluated_cases": 14,
+      "insufficient_cases_with_unnecessary_citations": 1,
+      "evaluated_insufficient_cases": 4
+    },
+    "latency_seconds": {
+      "mean": 110.957,
+      "median": 110.218,
+      "p95": 152.673,
+      "minimum": 50.295,
+      "maximum": 361.32
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "SUP-01",
+      "category": "connection_pool_saturation",
+      "description": "Connection pool reaches capacity during timeouts.",
+      "hypothesis": "Database connection pool saturation caused API request timeouts.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        101,
+        102
+      ],
+      "actual_evidence_ids": [
+        101,
+        102
+      ],
+      "rationale": "The hypothesis proposes that database connection pool saturation caused API request timeouts. Evidence ID 101 states that active connections reached the configured maximum of 100 for 4 minutes during the incident. Evidence ID 102 reports that in the same interval, API requests failed with a specific error message: 'timeout waiting to acquire a database connection from the application pool.' The temporal alignment (same interval), the direct observation of pool saturation (max connections reached), and the specific error message indicating a wait timeout for acquiring a connection collectively provide sufficient support for the proposed causal mechanism. The error explicitly links the failure to the inability to acquire a connection, which is the definition of pool saturation causing timeouts.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 82.401,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-02",
+      "category": "cpu_throttling",
+      "description": "Container CPU throttling coincides with latency.",
+      "hypothesis": "Container CPU throttling contributed to increased API request latency.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        111,
+        112
+      ],
+      "actual_evidence_ids": [
+        111,
+        112
+      ],
+      "rationale": "The evidence shows that CPU throttling was active in 42% of measurement periods during the incident (evidence_id 111), coinciding with a sharp increase in API p95 latency from 180 ms to 2.4 seconds (evidence_id 112). The temporal correlation and the direct mechanism (CPU limit reached leading to throttling) provide a reasonable basis for concluding that CPU throttling contributed to the increased latency.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 126.911,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-03",
+      "category": "consumer_failure",
+      "description": "Consumer crash explains message backlog.",
+      "hypothesis": "The inventory consumer crash caused messages to accumulate in the inventory processing queue.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        121,
+        122
+      ],
+      "actual_evidence_ids": [
+        121,
+        122
+      ],
+      "rationale": "The hypothesis proposes that an inventory consumer crash led to message accumulation in the queue. Evidence ID 121 confirms the inventory consumer process exited unexpectedly at 14:02:11 without restarting for six minutes. Evidence ID 122 shows that shortly after this exit (between 14:02 and 14:08), the inventory queue depth increased dramatically from 120 to 18,400 messages. The temporal sequence—consumer exit followed by a surge in queue depth—provides specific support for the causal mechanism that the crash caused the accumulation, as the absence of a consumer would naturally lead to message buildup.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 62.786,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-04",
+      "category": "dns_failure",
+      "description": "DNS resolution failures affect upstream calls.",
+      "hypothesis": "DNS resolution failures caused the checkout service to fail when contacting the payment service.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        131,
+        132
+      ],
+      "actual_evidence_ids": [
+        131,
+        132
+      ],
+      "rationale": "The hypothesis posits that DNS resolution failures caused checkout service failures when contacting the payment service. Evidence ID 131 provides direct log evidence showing the checkout service encountered 'getaddrinfo EAI_AGAIN' errors specifically while resolving 'payment.internal'. This error code signifies a failure to resolve a hostname to an IP address, confirming the DNS failure component of the hypothesis. Evidence ID 132 supports this by showing that traces indicate failures occurring at the hostname resolution step for the payment service and explicitly notes that no HTTP request reached the service, indicating the failure happened before network connectivity could be established, consistent with a resolution failure.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 143.78,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-05",
+      "category": "database_lock_contention",
+      "description": "Database lock waits align with slow transactions.",
+      "hypothesis": "Database lock contention contributed to the increase in transaction latency.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        141,
+        142
+      ],
+      "actual_evidence_ids": [
+        141,
+        142
+      ],
+      "rationale": "The hypothesis posits that database lock contention caused increased transaction latency. Evidence ID 141 directly supports this by showing a dramatic increase in database lock-wait time (from 5 ms to 1,850 ms), which is the specific metric for lock contention duration. Evidence ID 142 corroborates this by reporting explicit lock wait timeouts occurring during the same period, confirming that transactions were indeed blocked and waiting on locks. The combination of increased wait times and timeout events provides a reasonable basis for concluding that lock contention was the cause of the latency increase.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 143.063,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-06",
+      "category": "memory_exhaustion",
+      "description": "OOM kills precede worker request failures.",
+      "hypothesis": "Memory exhaustion caused API workers to terminate, contributing to failed requests.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        151,
+        152
+      ],
+      "actual_evidence_ids": [
+        151,
+        152
+      ],
+      "rationale": "Hypothesis 0 claims that memory exhaustion caused API worker terminations. Evidence 152 directly supports this by showing available container memory reached zero immediately before termination. Additionally, evidence 151 confirms an OOM (Out Of Memory) kill was recorded for api-worker-3 at the specified time, which is a direct mechanism of memory-induced termination. Together, these provide sufficient specific observations supporting the proposed causal explanation.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 67.729,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-07",
+      "category": "disk_io_pressure",
+      "description": "Storage latency affects database query latency.",
+      "hypothesis": "Elevated storage I/O latency contributed to slow database query execution.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        161,
+        162
+      ],
+      "actual_evidence_ids": [
+        161,
+        162
+      ],
+      "rationale": "The hypothesis posits that elevated storage I/O latency caused slow database query execution. Evidence ID 162 directly confirms that database query latency increased while CPU utilization remained low (below 40%), effectively ruling out CPU as the bottleneck. Evidence ID 161 provides the specific observation of a massive increase in volume I/O await time (from 3 ms to 920 ms) concurrent with these slow queries. The combination of high I/O wait times and correlated query latency, without competing CPU pressure, provides sufficient support for the proposed causal mechanism that storage I/O was the limiting factor.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 152.673,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-08",
+      "category": "deployment_regression",
+      "description": "A deployed version introduces a specific error.",
+      "hypothesis": "The latest checkout deployment introduced a regression that caused payment requests to fail.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        171,
+        172
+      ],
+      "actual_evidence_ids": [
+        171,
+        172
+      ],
+      "rationale": "The hypothesis proposes that a regression in deployment 2.8.1 caused payment failures. Evidence ID 171 confirms the timing of the deployment (version change from 2.8.0 to 2.8.1 at 16:00). Evidence ID 172 provides direct observations of the failure occurring immediately after this deployment and identifies a specific new error (serialization exception) not present in previous logs, which supports the proposed causal mechanism that the new version introduced a regression.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 69.76,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-01",
+      "category": "symptom_only",
+      "description": "Timeouts exist, but no cause is established.",
+      "hypothesis": "Database connection pool exhaustion caused API timeouts.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes 'Database connection pool exhaustion' as the cause. The cited evidence (ID 201) confirms API timeouts and (ID 202) confirms increased latency, which are symptoms consistent with the hypothesis but do not provide specific observations of the proposed mechanism (connection pool exhaustion). There is no evidence showing connection pool metrics (e.g., exhausted connections), a database origin for the error, or logs explicitly linking the timeouts to pool limits. Mere temporal correlation and symptom consistency are insufficient to verify the specific causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 67.351,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-02",
+      "category": "component_mismatch",
+      "description": "Evidence concerns another service.",
+      "hypothesis": "The checkout service's CPU saturation caused its request failures.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 137.89,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry.",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-03",
+      "category": "temporal_mismatch",
+      "description": "Evidence occurs after the incident.",
+      "hypothesis": "A database restart caused the API outage at 10:00.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [
+        221
+      ],
+      "rationale": "The cited evidence (evidence_id 221) explicitly states that the database restart completed at 10:45. The hypothesis proposes that a database restart caused the API outage which occurred between 10:00 and 10:10. Since the restart did not occur until after the outage had already ended, it cannot be the cause of the event. The timing directly conflicts with the proposed causal mechanism.",
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": 0.0,
+      "evidence_recall": 0.0,
+      "latency_seconds": 66.371,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": false
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-04",
+      "category": "recommendation_as_evidence",
+      "description": "A recommendation is not proof of a failure.",
+      "hypothesis": "The Redis cache outage caused the API latency increase.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 138.518,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry.",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-05",
+      "category": "possible_failure_mode",
+      "description": "A technically possible cause has no observation.",
+      "hypothesis": "A memory leak in the API service caused the incident.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 142.364,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry.",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-06",
+      "category": "measurement_scope",
+      "description": "A metric does not identify the relevant instance.",
+      "hypothesis": "The production API instance ran out of memory and caused the outage.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 144.292,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry.",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-07",
+      "category": "correlation_without_causation",
+      "description": "Two events coincide without a causal connection.",
+      "hypothesis": "The marketing campaign caused database latency by increasing checkout traffic.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes that increased checkout traffic caused the latency. While the timeline aligns (campaign start and latency increase both at 12:00), the cited evidence for metric 262 explicitly states that 'No checkout traffic volume or database workload measurements are available.' Without measurement of the traffic volume or workload, there is no specific observation supporting the causal mechanism that 'increasing' traffic was the cause. The evidence establishes temporal correlation but lacks the necessary support regarding the magnitude of traffic or workload changes required to verify the causal explanation.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 67.391,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-08",
+      "category": "conflicting_monitoring",
+      "description": "Conflicting measurements do not establish cause.",
+      "hypothesis": "Database CPU saturation caused the checkout outage.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes that database CPU saturation caused the outage. However, the cited evidence presents two conflicting and unreconciled metrics: one source reports 98% utilization while the other reports only 34%. The explicit statement that the sources have not been reconciled means there is no single confirmed observation of saturation. Without reconciled data confirming the high CPU levels at the component level affected by the outage, the evidence does not provide sufficient support for the specific causal mechanism of CPU saturation; it merely shows a disagreement in measurements.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 68.951,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-01",
+      "category": "healthy_connection_pool",
+      "description": "Connection pool remains far below capacity.",
+      "hypothesis": "Database connection pool exhaustion caused the API timeouts.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        301
+      ],
+      "actual_evidence_ids": [
+        301
+      ],
+      "rationale": "Evidence ID 301 explicitly states that active database connections were between 18 and 24, which is well below the configured maximum of 100. It also notes that no pool acquisition failures were recorded. The hypothesis claims that pool exhaustion caused timeouts; however, the absence of exhaustion (low connection count) directly contradicts this proposed mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 361.32,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-02",
+      "category": "no_cpu_throttling",
+      "description": "The relevant container has no CPU throttling.",
+      "hypothesis": "CPU throttling caused the API container's latency spike.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        311
+      ],
+      "actual_evidence_ids": [
+        311
+      ],
+      "rationale": "The hypothesis proposes that CPU throttling caused the latency spike. However, Evidence ID 311 explicitly states that the affected API container recorded zero CPU throttled periods during the incident and that its CPU usage remained below 45% of its limit. This observation directly contradicts the proposed causal mechanism, as there was no throttling to cause the issue.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 50.295,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-03",
+      "category": "consumer_healthy",
+      "description": "Consumer remained healthy while queue depth stayed at its normal baseline.",
+      "hypothesis": "An inventory consumer crash caused the inventory queue backlog.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        321,
+        322
+      ],
+      "actual_evidence_ids": [
+        321,
+        322
+      ],
+      "rationale": "The hypothesis claims an inventory consumer crash caused the backlog. However, evidence_id 321 explicitly states that the inventory consumer maintained its configured replica count and processed messages continuously throughout the incident, which directly contradicts the claim of a crash. Furthermore, evidence_id 322 shows that the inventory queue depth remained within normal baseline (80-110), which is inconsistent with a crash-induced backlog that would typically cause significant queue accumulation.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 52.727,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-04",
+      "category": "dns_healthy",
+      "description": "DNS resolution succeeds throughout the incident.",
+      "hypothesis": "DNS resolution failures caused checkout requests to fail.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        331,
+        332
+      ],
+      "actual_evidence_ids": [
+        331,
+        332
+      ],
+      "rationale": "Hypothesis 0 proposes that DNS resolution failures caused the checkout requests to fail. However, Evidence ID 331 explicitly states that 'DNS probes from the affected checkout instances successfully resolved payment.internal on every attempt during the outage.' This directly contradicts the proposed cause of DNS resolution failures. Furthermore, Evidence ID 332 confirms that traces show 'successful DNS resolution followed by an HTTP 503 response,' indicating the failure occurred after resolution, likely at the service level, not the DNS level.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 119.365,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-05",
+      "category": "no_database_lock_contention",
+      "description": "No lock waits occur during the relevant interval.",
+      "hypothesis": "Database lock contention caused the orders transaction latency increase.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        341
+      ],
+      "actual_evidence_ids": [
+        341
+      ],
+      "rationale": "The hypothesis claims database lock contention caused the latency increase. However, evidence 341 explicitly states that 'Database lock-wait duration remained zero throughout the incident' and 'No blocked transactions were observed.' Lock wait duration being zero directly contradicts the existence of lock contention, which would necessarily involve waiting locks or blocked transactions. Therefore, the cited evidence contradicts the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 116.06,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-06",
+      "category": "memory_healthy",
+      "description": "Memory measurements rule out memory exhaustion.",
+      "hypothesis": "Memory exhaustion caused the production API workers to terminate.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        351
+      ],
+      "actual_evidence_ids": [
+        351,
+        352
+      ],
+      "rationale": "The hypothesis claims that memory exhaustion caused worker terminations. However, Evidence ID 351 explicitly states that memory utilization remained between 38% and 52% (well below typical thresholds for exhaustion) and, crucially, records 'No OOM events or worker terminations'. The absence of the alleged effect (worker terminations due to OOM) directly contradicts the hypothesis that memory exhaustion caused those terminations. Evidence ID 352 describes HTTP 502 errors but does not confirm worker termination or link it to memory issues.",
+      "verdict_correct": true,
+      "evidence_exact_match": false,
+      "evidence_precision": 0.5,
+      "evidence_recall": 1.0,
+      "latency_seconds": 54.461,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-07",
+      "category": "storage_healthy",
+      "description": "Storage measurements contradict disk I/O pressure.",
+      "hypothesis": "Database disk I/O saturation caused slow query execution.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": null,
+      "expected_evidence_ids": [
+        361
+      ],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 122.124,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry.",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-08",
+      "category": "no_deployment",
+      "description": "Deployment history rules out the proposed release.",
+      "hypothesis": "A new checkout deployment introduced the regression responsible for the incident.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": null,
+      "expected_evidence_ids": [
+        371
+      ],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 104.376,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry.",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    }
+  ]
+}

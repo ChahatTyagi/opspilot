@@ -1,0 +1,160 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-14T08:49:57.321683+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 4,
+  "evaluation_count": 4,
+  "metrics": {
+    "unique_benchmark_cases": 4,
+    "total_evaluations": 4,
+    "successful_evaluations": 4,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 50.0,
+    "correct_verdicts": 2,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 2,
+        "contradicted": 2
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 4,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "production_validation": {
+      "evaluated_assessments": 4,
+      "accepted_assessments": 4,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 50.0,
+      "production_usable_correct_verdicts": 2,
+      "production_usable_accuracy_denominator": 4
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": null,
+      "mean_case_level_recall_percent": null,
+      "exact_match_count": 0,
+      "evaluated_cases": 0,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 4
+    },
+    "latency_seconds": {
+      "mean": 59.786,
+      "median": 57.709,
+      "p95": 69.757,
+      "minimum": 53.97,
+      "maximum": 69.757
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "INS-02",
+      "category": "component_mismatch",
+      "description": "Evidence concerns another service.",
+      "hypothesis": "The checkout service's CPU saturation caused its request failures.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis attributes the failures to CPU saturation in the checkout service. However, the cited evidence shows that high CPU utilization (98%) was measured on the analytics service, not the checkout service. The log confirms checkout request failures occurred, but no metric data links those failures to CPU issues within the checkout service itself. Therefore, the observed cause is inconsistent with the hypothesized component and mechanism.",
+      "verdict_correct": false,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 69.757,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": false
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-04",
+      "category": "recommendation_as_evidence",
+      "description": "A recommendation is not proof of a failure.",
+      "hypothesis": "The Redis cache outage caused the API latency increase.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes that a Redis cache outage caused the API latency increase. The cited evidence includes a metric showing increased API p95 latency, which confirms the symptom but does not establish the cause. The second evidence item is a recommendation to investigate Redis, which suggests Redis as a potential area of concern rather than providing observational evidence that an outage occurred or that it directly impacted the API. No evidence in the cited items confirms that Redis was unavailable at the time of the latency spike.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 53.97,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-05",
+      "category": "possible_failure_mode",
+      "description": "A technically possible cause has no observation.",
+      "hypothesis": "A memory leak in the API service caused the incident.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes that a memory leak caused the incident. The first cited evidence only reports the symptom (HTTP 503 errors), which does not confirm the underlying cause. The second cited evidence explicitly states that memory usage data was not collected for the affected service during the incident, so no observation of rising memory consumption or a memory limit being reached can be verified from the provided items. Without measured evidence linking the service to a memory leak (such as increasing memory usage or OOM kills), the proposed causal mechanism lacks support.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 57.953,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-06",
+      "category": "measurement_scope",
+      "description": "A metric does not identify the relevant instance.",
+      "hypothesis": "The production API instance ran out of memory and caused the outage.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes that a production API instance ran out of memory. However, the cited evidence explicitly states that no production-instance memory measurement is included; instead, it provides high memory utilization data for development containers only. Because the evidence fails to show that the specific production instance experienced an outage due to memory exhaustion, and in fact notes the absence of relevant production data, the hypothesis is contradicted by the scope of the provided evidence.",
+      "verdict_correct": false,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 57.465,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": false
+    }
+  ]
+}

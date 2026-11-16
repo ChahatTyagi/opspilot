@@ -1,0 +1,106 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T11:50:22.070313+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "SUP-01",
+    "INS-05",
+    "CON-03"
+  ],
+  "runs_per_case": 1,
+  "response_count": 4,
+  "responses": [
+    {
+      "case_id": "SUP-01",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T11:47:18.6059801Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"supported\",\n      \"evidence_ids\": [101],\n      \"rationale\": \"Evidence item 101 observes that active database connections reached the configured maximum and stayed there for multiple minutes during the incident. This directly supports the proposed causal mechanism of pool saturation. The hypothesis asserts that this saturation caused timeouts; while evidence 102 records timeout errors, evidence 101 confirms the specific state (pool at max capacity) claimed as the cause, providing a reasonable basis to support the explanation.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 84898481500,
+        "load_duration": 9317027300,
+        "prompt_eval_count": 1682,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 55085051000,
+        "eval_count": 144,
+        "eval_duration": 20475041000
+      }
+    },
+    {
+      "case_id": "SUP-01",
+      "run_number": 1,
+      "attempt_number": 2,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T11:48:29.6480409Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"supported\",\n      \"evidence_ids\": [101, 102],\n      \"rationale\": \"The cited evidence establishes that the database connection pool was saturated (active connections hit the maximum of 100 for four minutes) and that API requests failed with a specific error indicating they were timing out while trying to acquire a connection from the application pool during that same interval. This direct correlation between pool saturation and connection-acquisition timeouts provides a reasonable basis for the proposed causal mechanism.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 68960555200,
+        "load_duration": 25473000,
+        "prompt_eval_count": 1910,
+        "prompt_eval_cached_count": 658,
+        "prompt_eval_duration": 45621637000,
+        "eval_count": 141,
+        "eval_duration": 23280203000
+      }
+    },
+    {
+      "case_id": "INS-05",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T11:49:25.5539957Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"insufficient\",\n      \"evidence_ids\": [],\n      \"rationale\": \"The hypothesis proposes a memory leak as the cause of the incident. However, the first cited evidence item merely states that HTTP 503 errors occurred, which describes a symptom rather than providing any observation or measurement of a memory leak. The second cited evidence item explicitly notes that memory usage data was not collected for the affected service during the incident. Without actual measurements showing increasing memory usage or an observed memory leak, there is no specific observational support for the proposed causal mechanism. Consequently, the verdict is insufficient.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 53858946600,
+        "load_duration": 13217600,
+        "prompt_eval_count": 1658,
+        "prompt_eval_cached_count": 886,
+        "prompt_eval_duration": 30175971000,
+        "eval_count": 158,
+        "eval_duration": 23652395000
+      }
+    },
+    {
+      "case_id": "CON-03",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T11:50:22.0557146Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [\n        321,\n        322\n      ],\n      \"rationale\": \"The hypothesis proposes that an inventory consumer crash caused the backlog. Evidence ID 321 explicitly states that the inventory consumer maintained its configured replica count and processed messages continuously throughout the incident, which directly contradicts the existence of a crash. Furthermore, evidence ID 322 shows that queue depth remained within normal baseline limits (80-110), contradicting the symptom described in the hypothesis (a backlog). The cited evidence refutes both the alleged cause (crash) and the implied effect (backlog).\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 54424554900,
+        "load_duration": 15634300,
+        "prompt_eval_count": 1669,
+        "prompt_eval_cached_count": 886,
+        "prompt_eval_duration": 27925699000,
+        "eval_count": 179,
+        "eval_duration": 26463395000
+      }
+    }
+  ]
+}

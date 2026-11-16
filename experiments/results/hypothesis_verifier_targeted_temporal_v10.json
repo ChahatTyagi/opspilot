@@ -1,0 +1,120 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-14T19:19:55.544720+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 2,
+  "evaluation_count": 2,
+  "metrics": {
+    "unique_benchmark_cases": 2,
+    "total_evaluations": 2,
+    "successful_evaluations": 2,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 2,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 1,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 1
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 2,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "production_validation": {
+      "evaluated_assessments": 2,
+      "accepted_assessments": 2,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 100.0,
+      "production_usable_correct_verdicts": 2,
+      "production_usable_accuracy_denominator": 2
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 100.0,
+      "mean_case_level_recall_percent": 100.0,
+      "exact_match_count": 1,
+      "evaluated_cases": 1,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 1
+    },
+    "latency_seconds": {
+      "mean": 98.389,
+      "median": 98.389,
+      "p95": 135.823,
+      "minimum": 60.955,
+      "maximum": 135.823
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "INS-03",
+      "category": "temporal_mismatch",
+      "description": "Evidence occurs after the incident.",
+      "hypothesis": "A database restart caused the API outage at 10:00.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The provided evidence indicates that the database restart completed successfully at 10:45, while the API outage occurred between 10:00 and 10:10. However, the evidence does not specify when the database restart began. Without knowing the start time of the restart, it is impossible to determine if the restart process was ongoing during the outage interval or if the restart event could have preceded the incident. The completion timestamp alone is insufficient to establish a causal timeline.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 135.823,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-01",
+      "category": "healthy_connection_pool",
+      "description": "Connection pool remains far below capacity.",
+      "hypothesis": "Database connection pool exhaustion caused the API timeouts.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        301
+      ],
+      "actual_evidence_ids": [
+        301
+      ],
+      "rationale": "The evidence shows that during the API timeout interval, active database connections remained between 18 and 24, while the maximum capacity was 100. Additionally, no pool acquisition failures were recorded. These observations directly conflict with the proposed mechanism of connection pool exhaustion, as the pool was not near capacity and no failures associated with acquiring connections from a full pool occurred.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 60.955,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}

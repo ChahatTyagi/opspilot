@@ -1,0 +1,35 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T20:55:40.615445+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "SUP-08"
+  ],
+  "runs_per_case": 1,
+  "response_count": 1,
+  "responses": [
+    {
+      "case_id": "SUP-08",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T20:55:40.6095661Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"supported\",\n      \"evidence_ids\": [171, 172],\n      \"rationale\": \"The evidence establishes a specific deployment event where version 2.8.1 replaced 2.8.0 at 16:00 (Evidence 171). Failures began immediately after this deployment with a new serialization exception (Evidence 172), and this error was absent in the logs of the preceding version. This combination of a specific version change, immediate onset of failures upon that change, and the appearance of a new, previously unseen error satisfies the criteria for indirect evidence supporting a regression caused by the deployment.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 138933632000,
+        "load_duration": 15130500,
+        "prompt_eval_count": 3296,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 112007168000,
+        "eval_count": 173,
+        "eval_duration": 26839204000
+      }
+    }
+  ]
+}

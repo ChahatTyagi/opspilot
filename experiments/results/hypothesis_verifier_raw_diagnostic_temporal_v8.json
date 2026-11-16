@@ -1,0 +1,59 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T19:04:38.495738+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "INS-03",
+    "CON-01"
+  ],
+  "runs_per_case": 1,
+  "response_count": 2,
+  "responses": [
+    {
+      "case_id": "INS-03",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T19:03:33.7624523Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [221],\n      \"rationale\": \"The evidence indicates that the database restart was completed successfully at 10:45. Since the API outage occurred between 10:00 and 10:10, and the restart could not have started before its completion time of 10:45, the restart could not have caused an event that ended by 10:10.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 116662860800,
+        "load_duration": 10037021500,
+        "prompt_eval_count": 2803,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 86498747000,
+        "eval_count": 137,
+        "eval_duration": 20085422000
+      }
+    },
+    {
+      "case_id": "CON-01",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T19:04:38.4852301Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [301],\n      \"rationale\": \"The hypothesis proposes that database connection pool exhaustion caused the API timeouts. However, the cited metric evidence indicates that active database connections remained between 18 and 24 throughout the incident, against a configured maximum of 100. Additionally, no pool acquisition failures were recorded. These observations directly conflict with the proposed mechanism of pool exhaustion, which would require connections to approach or exceed the limit and result in acquisition failures. Therefore, the evidence establishes that the specific condition necessary for the hypothesis (exhaustion) did not occur.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 62646784300,
+        "load_duration": 27443800,
+        "prompt_eval_count": 2793,
+        "prompt_eval_cached_count": 1779,
+        "prompt_eval_duration": 36559067000,
+        "eval_count": 168,
+        "eval_duration": 26018236000
+      }
+    }
+  ]
+}

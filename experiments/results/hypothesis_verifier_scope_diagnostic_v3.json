@@ -1,0 +1,116 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-14T08:59:17.324458+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 2,
+  "evaluation_count": 2,
+  "metrics": {
+    "unique_benchmark_cases": 2,
+    "total_evaluations": 2,
+    "successful_evaluations": 2,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 2,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 2,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 2,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "production_validation": {
+      "evaluated_assessments": 2,
+      "accepted_assessments": 2,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 100.0,
+      "production_usable_correct_verdicts": 2,
+      "production_usable_accuracy_denominator": 2
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": null,
+      "mean_case_level_recall_percent": null,
+      "exact_match_count": 0,
+      "evaluated_cases": 0,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 2
+    },
+    "latency_seconds": {
+      "mean": 69.222,
+      "median": 69.222,
+      "p95": 82.191,
+      "minimum": 56.253,
+      "maximum": 82.191
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "INS-02",
+      "category": "component_mismatch",
+      "description": "Evidence concerns another service.",
+      "hypothesis": "The checkout service's CPU saturation caused its request failures.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis attributes checkout failures to CPU saturation in the checkout service. The provided evidence shows high CPU usage (98%) specifically for the analytics service, not the checkout service. Since the measurement concerns a different service, it does not establish that the checkout service's CPU was saturated or that this caused the failures. Therefore, the evidence is insufficient to support the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 82.191,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-06",
+      "category": "measurement_scope",
+      "description": "A metric does not identify the relevant instance.",
+      "hypothesis": "The production API instance ran out of memory and caused the outage.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis claims the production API instance ran out of memory. The only memory evidence cited (ID 251) reports usage on development containers, not the production instance; therefore it cannot support or refute the claim about the production environment. The second cited item (ID 252) describes an HTTP 503 symptom but provides no measurement of memory utilization or the specific cause. Consequently, the evidence does not provide enough support for the proposed causal explanation.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 56.253,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}

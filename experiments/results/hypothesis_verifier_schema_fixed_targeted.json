@@ -1,0 +1,150 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-14T11:50:22.065833+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 3,
+  "evaluation_count": 3,
+  "metrics": {
+    "unique_benchmark_cases": 3,
+    "total_evaluations": 3,
+    "successful_evaluations": 3,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 3,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 1,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 1,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 1
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 2,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 1,
+      "rate_percent": 0.0
+    },
+    "production_validation": {
+      "evaluated_assessments": 3,
+      "accepted_assessments": 3,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 100.0,
+      "production_usable_correct_verdicts": 3,
+      "production_usable_accuracy_denominator": 3
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 100.0,
+      "mean_case_level_recall_percent": 100.0,
+      "exact_match_count": 2,
+      "evaluated_cases": 2,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 1
+    },
+    "latency_seconds": {
+      "mean": 90.152,
+      "median": 56.494,
+      "p95": 158.05,
+      "minimum": 55.912,
+      "maximum": 158.05
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "SUP-01",
+      "category": "connection_pool_saturation",
+      "description": "Connection pool reaches capacity during timeouts.",
+      "hypothesis": "Database connection pool saturation caused API request timeouts.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        101,
+        102
+      ],
+      "actual_evidence_ids": [
+        101,
+        102
+      ],
+      "rationale": "The cited evidence establishes that the database connection pool was saturated (active connections hit the maximum of 100 for four minutes) and that API requests failed with a specific error indicating they were timing out while trying to acquire a connection from the application pool during that same interval. This direct correlation between pool saturation and connection-acquisition timeouts provides a reasonable basis for the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 158.05,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-05",
+      "category": "possible_failure_mode",
+      "description": "A technically possible cause has no observation.",
+      "hypothesis": "A memory leak in the API service caused the incident.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The hypothesis proposes a memory leak as the cause of the incident. However, the first cited evidence item merely states that HTTP 503 errors occurred, which describes a symptom rather than providing any observation or measurement of a memory leak. The second cited evidence item explicitly notes that memory usage data was not collected for the affected service during the incident. Without actual measurements showing increasing memory usage or an observed memory leak, there is no specific observational support for the proposed causal mechanism. Consequently, the verdict is insufficient.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 55.912,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-03",
+      "category": "consumer_healthy",
+      "description": "Consumer remained healthy while queue depth stayed at its normal baseline.",
+      "hypothesis": "An inventory consumer crash caused the inventory queue backlog.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        321,
+        322
+      ],
+      "actual_evidence_ids": [
+        321,
+        322
+      ],
+      "rationale": "The hypothesis proposes that an inventory consumer crash caused the backlog. Evidence ID 321 explicitly states that the inventory consumer maintained its configured replica count and processed messages continuously throughout the incident, which directly contradicts the existence of a crash. Furthermore, evidence ID 322 shows that queue depth remained within normal baseline limits (80-110), contradicting the symptom described in the hypothesis (a backlog). The cited evidence refutes both the alleged cause (crash) and the implied effect (backlog).",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 56.494,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}

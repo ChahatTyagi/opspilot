@@ -1,0 +1,155 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T12:37:38.776184+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "INS-04",
+    "INS-05",
+    "INS-06",
+    "SUP-01",
+    "SUP-08",
+    "CON-03"
+  ],
+  "runs_per_case": 1,
+  "response_count": 6,
+  "responses": [
+    {
+      "case_id": "INS-04",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T12:32:39.1180888Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"insufficient\",\n      \"evidence_ids\": [],\n      \"rationale\": \"The provided evidence includes a recommendation to investigate Redis availability and a metric showing increased API latency. The recommendation suggests investigating Redis but does not confirm that Redis was actually down or that an outage occurred at the relevant time. The latency metric describes the symptom (increased latency) but does not measure Redis status or provide a direct observation of a Redis failure. Without evidence confirming a Redis outage, temporal correlation between the outage and the latency spike, or a measured link showing the cache failure caused the delay, the causal mechanism is not supported.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 94830975000,
+        "load_duration": 11059832900,
+        "prompt_eval_count": 1908,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 60878045000,
+        "eval_count": 162,
+        "eval_duration": 22853626000
+      }
+    },
+    {
+      "case_id": "INS-05",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T12:33:35.3349589Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"insufficient\",\n      \"evidence_ids\": [],\n      \"rationale\": \"The cited evidence indicates that memory usage was not collected for the affected service. Without actual memory measurements, there is no observation to support the claim of a memory leak. The presence of HTTP 503 errors is a symptom that could result from many causes, including resource exhaustion or timeouts, but does not specifically confirm a memory leak mechanism.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 54145947700,
+        "load_duration": 25951200,
+        "prompt_eval_count": 1906,
+        "prompt_eval_cached_count": 884,
+        "prompt_eval_duration": 35727598000,
+        "eval_count": 125,
+        "eval_duration": 18349758000
+      }
+    },
+    {
+      "case_id": "INS-06",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T12:34:37.9774559Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"insufficient\",\n      \"evidence_ids\": [],\n      \"rationale\": \"The hypothesis proposes that a production API instance ran out of memory. However, the only memory measurement provided concerns development containers (96% utilization), with an explicit note that no production-instance memory measurement is included. Measurements from development environments cannot establish the memory state of a production instance. The log entry showing HTTP 503 errors describes the symptom (service unavailability) but does not measure the proposed cause (memory exhaustion). Therefore, the cited evidence does not provide sufficient support for the claim that memory exhaustion on the production API caused the outage.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 60555559300,
+        "load_duration": 15827600,
+        "prompt_eval_count": 1913,
+        "prompt_eval_cached_count": 884,
+        "prompt_eval_duration": 35968239000,
+        "eval_count": 166,
+        "eval_duration": 24541933000
+      }
+    },
+    {
+      "case_id": "SUP-01",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T12:35:37.1642257Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"supported\",\n      \"evidence_ids\": [101, 102],\n      \"rationale\": \"The metric shows that active database connections reached and maintained the maximum limit of 100 for a sustained period, indicating pool saturation. The log confirms that API requests failed with 'timeout waiting to acquire a database connection from the application pool' during this exact same interval. Together, these observations directly link the state of pool saturation to the observed timeout errors.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 57121090300,
+        "load_duration": 18030600,
+        "prompt_eval_count": 1930,
+        "prompt_eval_cached_count": 889,
+        "prompt_eval_duration": 36887723000,
+        "eval_count": 136,
+        "eval_duration": 20186345000
+      }
+    },
+    {
+      "case_id": "SUP-08",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T12:36:37.9395217Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"supported\",\n      \"evidence_ids\": [171, 172],\n      \"rationale\": \"The deployment record confirms that version 2.8.1 replaced 2.8.0 at 16:00. The log entry from shortly after this time shows a new serialization exception in the payment request adapter, which was absent in the previous version. This temporal correlation and the introduction of a new error directly after a code change provides specific support for the regression caused by the deployment.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 58732236700,
+        "load_duration": 12353900,
+        "prompt_eval_count": 1946,
+        "prompt_eval_cached_count": 906,
+        "prompt_eval_duration": 37075266000,
+        "eval_count": 145,
+        "eval_duration": 21614284000
+      }
+    },
+    {
+      "case_id": "CON-03",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T12:37:38.7627987Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [321, 322],\n      \"rationale\": \"The hypothesis proposes that the inventory consumer crashed, leading to a backlog. However, the cited evidence directly contradicts this by stating that the inventory consumer maintained its replica count and processed messages continuously throughout the incident (Evidence 321). Additionally, the queue depth remained within normal baseline levels between 80 and 110 messages (Evidence 322), which is inconsistent with a scenario where a consumer crash caused a significant backlog.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 58741274400,
+        "load_duration": 21557200,
+        "prompt_eval_count": 1917,
+        "prompt_eval_cached_count": 922,
+        "prompt_eval_duration": 35525531000,
+        "eval_count": 156,
+        "eval_duration": 23153581000
+      }
+    }
+  ]
+}

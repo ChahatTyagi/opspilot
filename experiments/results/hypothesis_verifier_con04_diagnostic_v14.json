@@ -1,0 +1,100 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-14T22:45:50.663428+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 1,
+  "evaluation_count": 1,
+  "metrics": {
+    "unique_benchmark_cases": 1,
+    "total_evaluations": 1,
+    "successful_evaluations": 1,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 1,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 1
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 1,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "production_validation": {
+      "evaluated_assessments": 1,
+      "accepted_assessments": 1,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 100.0,
+      "production_usable_correct_verdicts": 1,
+      "production_usable_accuracy_denominator": 1
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 100.0,
+      "mean_case_level_recall_percent": 100.0,
+      "exact_match_count": 1,
+      "evaluated_cases": 1,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 0
+    },
+    "latency_seconds": {
+      "mean": 147.699,
+      "median": 147.699,
+      "p95": 147.699,
+      "minimum": 147.699,
+      "maximum": 147.699
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "CON-04",
+      "category": "dns_healthy",
+      "description": "DNS resolution succeeds throughout the incident.",
+      "hypothesis": "DNS resolution failures caused checkout requests to fail.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        331,
+        332
+      ],
+      "actual_evidence_ids": [
+        331,
+        332
+      ],
+      "rationale": "The evidence explicitly states that DNS probes from the affected checkout instances successfully resolved 'payment.internal' on every attempt during the outage. Additionally, the failed checkout traces show successful DNS resolution followed by an HTTP 503 response. These observations directly conflict with the proposed causal mechanism of 'DNS resolution failures.' Since DNS resolution was confirmed as successful throughout the incident, it could not have caused the request failures. Therefore, the hypothesis is contradicted.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 147.699,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}

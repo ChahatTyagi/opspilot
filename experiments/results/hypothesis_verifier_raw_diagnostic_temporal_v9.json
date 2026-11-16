@@ -1,0 +1,59 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T19:11:27.451896+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "INS-03",
+    "CON-01"
+  ],
+  "runs_per_case": 1,
+  "response_count": 2,
+  "responses": [
+    {
+      "case_id": "INS-03",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T19:10:21.1608217Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"insufficient\",\n      \"evidence_ids\": [],\n      \"rationale\": \"The provided evidence states that the database restart completed successfully at 10:45 and the API outage occurred between 10:00 and 10:10. However, the evidence does not specify when the restart began. A restart could have started before 10:00, continued through the outage interval, and completed at 10:45. Since the completion timestamp alone does not establish the start time, there is no direct contradiction to the hypothesis that the restart caused the outage, nor is there sufficient evidence to confirm or refute the causal mechanism.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 69657790200,
+        "load_duration": 19940600,
+        "prompt_eval_count": 2960,
+        "prompt_eval_cached_count": 1779,
+        "prompt_eval_duration": 43162149000,
+        "eval_count": 175,
+        "eval_duration": 26432404000
+      }
+    },
+    {
+      "case_id": "CON-01",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T19:11:27.4459154Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"insufficient\",\n      \"evidence_ids\": [],\n      \"rationale\": \"The hypothesis proposes that connection pool exhaustion caused the timeouts. However, the cited evidence explicitly states that active database connections remained between 18 and 24 against a maximum capacity of 100, and no pool acquisition failures were recorded. These observations directly conflict with the mechanism of 'exhaustion' (which implies usage near or at the limit). While the hypothesis is plausible in a general sense, the specific evidence provided rules out the exhaustion mechanism for this component during the incident interval. Therefore, the verdict is CONTRADICTED.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 64191361300,
+        "load_duration": 25311900,
+        "prompt_eval_count": 2950,
+        "prompt_eval_cached_count": 1936,
+        "prompt_eval_duration": 38450667000,
+        "eval_count": 166,
+        "eval_duration": 25665052000
+      }
+    }
+  ]
+}

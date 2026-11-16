@@ -1,0 +1,35 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T22:45:50.665186+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "CON-04"
+  ],
+  "runs_per_case": 1,
+  "response_count": 1,
+  "responses": [
+    {
+      "case_id": "CON-04",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T22:45:50.657191Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [331, 332],\n      \"rationale\": \"The evidence explicitly states that DNS probes from the affected checkout instances successfully resolved 'payment.internal' on every attempt during the outage. Additionally, the failed checkout traces show successful DNS resolution followed by an HTTP 503 response. These observations directly conflict with the proposed causal mechanism of 'DNS resolution failures.' Since DNS resolution was confirmed as successful throughout the incident, it could not have caused the request failures. Therefore, the hypothesis is contradicted.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 145559882800,
+        "load_duration": 10319425700,
+        "prompt_eval_count": 3476,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 112247337000,
+        "eval_count": 155,
+        "eval_duration": 22943388000
+      }
+    }
+  ]
+}

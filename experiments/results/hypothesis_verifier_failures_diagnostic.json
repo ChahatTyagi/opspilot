@@ -1,0 +1,212 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-14T08:33:10.095061+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 6,
+  "evaluation_count": 6,
+  "metrics": {
+    "unique_benchmark_cases": 6,
+    "total_evaluations": 6,
+    "successful_evaluations": 2,
+    "failed_evaluations": 4,
+    "execution_success_rate_percent": 33.33,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 2,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 2
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 2,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "production_validation": {
+      "evaluated_assessments": 2,
+      "accepted_assessments": 2,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 100.0,
+      "production_usable_correct_verdicts": 2,
+      "production_usable_accuracy_denominator": 2
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 100.0,
+      "mean_case_level_recall_percent": 100.0,
+      "exact_match_count": 2,
+      "evaluated_cases": 2,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 0
+    },
+    "latency_seconds": {
+      "mean": 103.328,
+      "median": 121.09,
+      "p95": 139.318,
+      "minimum": 53.994,
+      "maximum": 139.318
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "INS-02",
+      "category": "component_mismatch",
+      "description": "Evidence concerns another service.",
+      "hypothesis": "The checkout service's CPU saturation caused its request failures.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 139.318,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry. First attempt error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 211, 212. Corrective retry error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 211, 212",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-04",
+      "category": "recommendation_as_evidence",
+      "description": "A recommendation is not proof of a failure.",
+      "hypothesis": "The Redis cache outage caused the API latency increase.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 118.774,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry. First attempt error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 231, 232. Corrective retry error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 231, 232",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-05",
+      "category": "possible_failure_mode",
+      "description": "A technically possible cause has no observation.",
+      "hypothesis": "A memory leak in the API service caused the incident.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 123.405,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry. First attempt error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 241, 242. Corrective retry error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 241, 242",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-06",
+      "category": "measurement_scope",
+      "description": "A metric does not identify the relevant instance.",
+      "hypothesis": "The production API instance ran out of memory and caused the outage.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": null,
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": null,
+      "verdict_correct": false,
+      "evidence_exact_match": false,
+      "evidence_precision": null,
+      "evidence_recall": null,
+      "latency_seconds": 129.632,
+      "error": "ValueError: Ollama verifier returned an invalid assessment after one corrective retry. First attempt error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 252. Corrective retry error: Verifier rationale references evidence IDs that are missing from its structured evidence_ids: 251, 252",
+      "production_validation_passed": null,
+      "production_validation_error": null,
+      "production_usable_verdict": null,
+      "production_usable_verdict_correct": null
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-07",
+      "category": "storage_healthy",
+      "description": "Storage measurements contradict disk I/O pressure.",
+      "hypothesis": "Database disk I/O saturation caused slow query execution.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        361
+      ],
+      "actual_evidence_ids": [
+        361
+      ],
+      "rationale": "The hypothesis proposes that database disk I/O saturation caused the slow query execution. However, evidence 361 explicitly states that 'I/O await time remained below 4 ms' during the incident period. Low I/O await times indicate that the storage subsystem was not saturated with I/O requests. Since the proposed mechanism (I/O saturation) is directly contradicted by the observed metric (low await time), the causal link is invalid.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 53.994,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-08",
+      "category": "no_deployment",
+      "description": "Deployment history rules out the proposed release.",
+      "hypothesis": "A new checkout deployment introduced the regression responsible for the incident.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        371
+      ],
+      "actual_evidence_ids": [
+        371
+      ],
+      "rationale": "The hypothesis proposes that a new checkout deployment introduced the regression. However, evidence_id 371 explicitly states that version 2.8.0 remained deployed throughout the incident and that no deployment, rollback, or configuration change occurred during the relevant period. This directly conflicts with the proposed causal mechanism of a new deployment being the source of the issue.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 54.842,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}

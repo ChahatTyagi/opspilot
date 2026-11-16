@@ -1,0 +1,59 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T19:19:55.546633+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "INS-03",
+    "CON-01"
+  ],
+  "runs_per_case": 1,
+  "response_count": 2,
+  "responses": [
+    {
+      "case_id": "INS-03",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T19:18:54.5793584Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"insufficient\",\n      \"evidence_ids\": [],\n      \"rationale\": \"The provided evidence indicates that the database restart completed successfully at 10:45, while the API outage occurred between 10:00 and 10:10. However, the evidence does not specify when the database restart began. Without knowing the start time of the restart, it is impossible to determine if the restart process was ongoing during the outage interval or if the restart event could have preceded the incident. The completion timestamp alone is insufficient to establish a causal timeline.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 133657626200,
+        "load_duration": 9064393200,
+        "prompt_eval_count": 3078,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 100731832000,
+        "eval_count": 155,
+        "eval_duration": 23826897000
+      }
+    },
+    {
+      "case_id": "CON-01",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T19:19:55.5405193Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [301],\n      \"rationale\": \"The evidence shows that during the API timeout interval, active database connections remained between 18 and 24, while the maximum capacity was 100. Additionally, no pool acquisition failures were recorded. These observations directly conflict with the proposed mechanism of connection pool exhaustion, as the pool was not near capacity and no failures associated with acquiring connections from a full pool occurred.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 58894376900,
+        "load_duration": 19807900,
+        "prompt_eval_count": 3068,
+        "prompt_eval_cached_count": 2054,
+        "prompt_eval_duration": 37607517000,
+        "eval_count": 137,
+        "eval_duration": 21238846000
+      }
+    }
+  ]
+}

@@ -47,6 +47,12 @@ from app.config import get_verifier_model
 from app.evidence_validation import validate_hypothesis_verification
 from app.ollama_client import OllamaClient
 from app.ollama_verification import verify_ollama_hypotheses
+from app.ollama_verification import verify_ollama_hypotheses
+from experiments.heldout_hypothesis_cases import (
+    build_heldout_cases,
+    validate_heldout_cases,
+)
+
 
 
 # ---------------------------------------------------------------------
@@ -69,11 +75,26 @@ DEFAULT_RAW_DIAGNOSTIC_OUTPUT = (
     / "hypothesis_verifier_raw_diagnostic.json"
 )
 
+DEFAULT_HELDOUT_OUTPUT = (
+    PROJECT_ROOT
+    / "experiments"
+    / "results"
+    / "hypothesis_verifier_heldout_v1.json"
+)
+
+DEFAULT_HELDOUT_RAW_DIAGNOSTIC_OUTPUT = (
+    PROJECT_ROOT
+    / "experiments"
+    / "results"
+    / "hypothesis_verifier_heldout_raw_diagnostic.json"
+)
+
 VERDICTS = (
     AIHypothesisVerdict.SUPPORTED.value,
     AIHypothesisVerdict.INSUFFICIENT.value,
     AIHypothesisVerdict.CONTRADICTED.value,
 )
+
 
 
 # ---------------------------------------------------------------------
@@ -1557,6 +1578,15 @@ def parse_arguments() -> argparse.Namespace:
             "Evaluate OpsPilot's independent Ollama hypothesis verifier."
         )
     )
+    parser.add_argument(
+        "--dataset",
+        choices=("original", "heldout"),
+        default="original",
+        help=(
+            "Dataset to evaluate: original 24-case benchmark "
+            "or independent 12-case held-out benchmark."
+        ),
+    )
 
     parser.add_argument(
         "--runs",
@@ -1616,8 +1646,20 @@ def parse_arguments() -> argparse.Namespace:
 # Main execution
 # ---------------------------------------------------------------------
 
+
+
 def main() -> None:
     args = parse_arguments()
+
+    # Select separate default output files for each dataset.
+    if args.dataset == "heldout":
+        if args.output == DEFAULT_OUTPUT:
+            args.output = DEFAULT_HELDOUT_OUTPUT
+
+        if args.raw_output == DEFAULT_RAW_DIAGNOSTIC_OUTPUT:
+            args.raw_output = (
+                DEFAULT_HELDOUT_RAW_DIAGNOSTIC_OUTPUT
+            )
 
     if args.runs < 1:
         raise SystemExit("--runs must be at least 1.")
@@ -1626,6 +1668,55 @@ def main() -> None:
         raise SystemExit(
             "Use either --case-ids or --limit, not both."
         )
+
+    # Select and validate the requested dataset.
+    if args.dataset == "original":
+        cases = build_benchmark_cases()
+    else:
+        cases = build_heldout_cases()
+        validate_heldout_cases(cases)
+
+    # Validate selected case IDs.
+    if args.case_ids is not None:
+        requested_ids = args.case_ids
+
+        if len(requested_ids) != len(set(requested_ids)):
+            raise SystemExit(
+                "--case-ids contains duplicate case IDs."
+            )
+
+        available_cases = {
+            case.case_id: case
+            for case in cases
+        }
+
+        unknown_ids = [
+            case_id
+            for case_id in requested_ids
+            if case_id not in available_cases
+        ]
+
+        if unknown_ids:
+            raise SystemExit(
+                f"Unknown {args.dataset} case IDs: {unknown_ids}"
+            )
+
+        # Preserve the order supplied by the user.
+        cases = [
+            available_cases[case_id]
+            for case_id in requested_ids
+        ]
+
+    if args.limit is not None:
+        if args.limit < 1:
+            raise SystemExit("--limit must be at least 1.")
+
+        if args.limit > len(cases):
+            raise SystemExit(
+                f"--limit cannot exceed {len(cases)} benchmark cases."
+            )
+
+        cases = cases[:args.limit]
 
     # Resolve output paths before model evaluations.
     output_path = args.output.resolve()
@@ -1660,50 +1751,7 @@ def main() -> None:
             f"{diagnostic_output_path}"
         )
 
-
-    cases = build_benchmark_cases()
-
-    if args.case_ids is not None:
-        requested_ids = args.case_ids
-
-        if len(requested_ids) != len(set(requested_ids)):
-            raise SystemExit(
-                "--case-ids contains duplicate case IDs."
-            )
-
-        available_cases = {
-            case.case_id: case
-            for case in cases
-        }
-
-        unknown_ids = [
-            case_id
-            for case_id in requested_ids
-            if case_id not in available_cases
-        ]
-
-        if unknown_ids:
-            raise SystemExit(
-                f"Unknown benchmark case IDs: {unknown_ids}"
-            )
-
-        # Preserve the order supplied by the user.
-        cases = [
-            available_cases[case_id]
-            for case_id in requested_ids
-        ]
-
-    if args.limit is not None:
-        if args.limit < 1:
-            raise SystemExit("--limit must be at least 1.")
-
-        if args.limit > len(cases):
-            raise SystemExit(
-                f"--limit cannot exceed {len(cases)} benchmark cases."
-            )
-
-        cases = cases[:args.limit]
-
+    # Initialize the model only after all local validation.
     model = get_verifier_model()
 
     total_evaluations = len(cases) * args.runs
@@ -1715,6 +1763,7 @@ def main() -> None:
 
     print("=" * 68)
     print("Starting OpsPilot hypothesis verifier benchmark")
+    print(f"Dataset: {args.dataset}")
     print(f"Verifier model: {model}")
     print(f"Unique benchmark cases: {len(cases)}")
     print(f"Runs per case: {args.runs}")
@@ -1742,9 +1791,7 @@ def main() -> None:
             "Do not use it for final benchmark accuracy."
         )
 
-        print(
-            "Raw response recording is enabled."
-        )
+        print("Raw response recording is enabled.")
 
     print("=" * 68)
 
@@ -1805,7 +1852,10 @@ def main() -> None:
 
     report = {
         "benchmark": "OpsPilot Hypothesis Verifier",
-        "benchmark_version": 3,
+        "dataset": args.dataset,
+        "benchmark_version": (
+            3 if args.dataset == "original" else 1
+        ),
         "generated_at": datetime.now(
             timezone.utc
         ).isoformat(),
@@ -1851,6 +1901,7 @@ def main() -> None:
             "benchmark": (
                 "OpsPilot Hypothesis Verifier Raw Diagnostic"
             ),
+            "dataset": args.dataset,
             "generated_at": datetime.now(
                 timezone.utc
             ).isoformat(),

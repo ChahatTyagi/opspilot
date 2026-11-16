@@ -1,0 +1,59 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier Raw Diagnostic",
+  "generated_at": "2026-11-14T18:16:53.493477+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "case_ids": [
+    "INS-03",
+    "CON-01"
+  ],
+  "runs_per_case": 1,
+  "response_count": 2,
+  "responses": [
+    {
+      "case_id": "INS-03",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T18:15:57.9665247Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [221],\n      \"rationale\": \"The evidence indicates that the database restart completed successfully at 10:45. However, the API outage occurred between 10:00 and 10:10. Since the restart finished after the outage had already ended, the restart could not have caused the earlier outage.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 119646898000,
+        "load_duration": 18112656700,
+        "prompt_eval_count": 2611,
+        "prompt_eval_cached_count": 0,
+        "prompt_eval_duration": 83744565000,
+        "eval_count": 121,
+        "eval_duration": 17748252000
+      }
+    },
+    {
+      "case_id": "CON-01",
+      "run_number": 1,
+      "attempt_number": 1,
+      "model": "qwen3.5:9b-q4_K_M",
+      "response": {
+        "model": "qwen3.5:9b-q4_K_M",
+        "created_at": "2026-11-14T18:16:53.4822244Z",
+        "message": {
+          "role": "assistant",
+          "content": "{\n  \"assessments\": [\n    {\n      \"hypothesis_index\": 0,\n      \"verdict\": \"contradicted\",\n      \"evidence_ids\": [301],\n      \"rationale\": \"The hypothesis proposes that database connection pool exhaustion caused the API timeouts. However, evidence record 301 states that active database connections remained between 18 and 24 against a configured maximum of 100 throughout the incident interval, with no pool acquisition failures recorded. These observations directly conflict with the mechanism of pool exhaustion, which would require high utilization or acquisition failures.\"\n    }\n  ]\n}"
+        },
+        "done": true,
+        "done_reason": "stop",
+        "total_duration": 53436109300,
+        "load_duration": 21822800,
+        "prompt_eval_count": 2601,
+        "prompt_eval_cached_count": 1587,
+        "prompt_eval_duration": 33481322999,
+        "eval_count": 138,
+        "eval_duration": 19907300000
+      }
+    }
+  ]
+}

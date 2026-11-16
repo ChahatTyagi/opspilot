@@ -1,0 +1,100 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "benchmark_version": 3,
+  "generated_at": "2026-11-14T20:55:40.612122+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 1,
+  "evaluation_count": 1,
+  "metrics": {
+    "unique_benchmark_cases": 1,
+    "total_evaluations": 1,
+    "successful_evaluations": 1,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 1,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 1,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 0
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 0,
+      "rate_percent": null
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 1,
+      "rate_percent": 0.0
+    },
+    "production_validation": {
+      "evaluated_assessments": 1,
+      "accepted_assessments": 1,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 100.0,
+      "production_usable_correct_verdicts": 1,
+      "production_usable_accuracy_denominator": 1
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 100.0,
+      "mean_case_level_recall_percent": 100.0,
+      "exact_match_count": 1,
+      "evaluated_cases": 1,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 0
+    },
+    "latency_seconds": {
+      "mean": 141.048,
+      "median": 141.048,
+      "p95": 141.048,
+      "minimum": 141.048,
+      "maximum": 141.048
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "SUP-08",
+      "category": "deployment_regression",
+      "description": "A deployed version introduces a specific error.",
+      "hypothesis": "The latest checkout deployment introduced a regression that caused payment requests to fail.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        171,
+        172
+      ],
+      "actual_evidence_ids": [
+        171,
+        172
+      ],
+      "rationale": "The evidence establishes a specific deployment event where version 2.8.1 replaced 2.8.0 at 16:00 (Evidence 171). Failures began immediately after this deployment with a new serialization exception (Evidence 172), and this error was absent in the logs of the preceding version. This combination of a specific version change, immediate onset of failures upon that change, and the appearance of a new, previously unseen error satisfies the criteria for indirect evidence supporting a regression caused by the deployment.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 141.048,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}

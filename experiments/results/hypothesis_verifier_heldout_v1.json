@@ -1,0 +1,385 @@
+{
+  "benchmark": "OpsPilot Hypothesis Verifier",
+  "dataset": "heldout",
+  "benchmark_version": 1,
+  "generated_at": "2026-11-16T19:41:14.000445+00:00",
+  "model": "qwen3.5:9b-q4_K_M",
+  "runs_per_case": 1,
+  "case_count": 12,
+  "evaluation_count": 12,
+  "metrics": {
+    "unique_benchmark_cases": 12,
+    "total_evaluations": 12,
+    "successful_evaluations": 12,
+    "failed_evaluations": 0,
+    "execution_success_rate_percent": 100.0,
+    "verdict_accuracy_percent": 100.0,
+    "correct_verdicts": 12,
+    "confusion_matrix": {
+      "supported": {
+        "supported": 4,
+        "insufficient": 0,
+        "contradicted": 0
+      },
+      "insufficient": {
+        "supported": 0,
+        "insufficient": 4,
+        "contradicted": 0
+      },
+      "contradicted": {
+        "supported": 0,
+        "insufficient": 0,
+        "contradicted": 4
+      }
+    },
+    "false_supported": {
+      "count": 0,
+      "denominator": 8,
+      "rate_percent": 0.0
+    },
+    "supported_hypothesis_rejection": {
+      "count": 0,
+      "denominator": 4,
+      "rate_percent": 0.0
+    },
+    "production_validation": {
+      "evaluated_assessments": 12,
+      "accepted_assessments": 12,
+      "rejected_assessments": 0,
+      "acceptance_rate_percent": 100.0,
+      "production_usable_verdict_accuracy_percent": 100.0,
+      "production_usable_correct_verdicts": 12,
+      "production_usable_accuracy_denominator": 12
+    },
+    "evidence_citations": {
+      "averaging_method": "macro_mean_of_case_level_scores",
+      "mean_case_level_precision_percent": 100.0,
+      "mean_case_level_recall_percent": 100.0,
+      "exact_match_count": 8,
+      "evaluated_cases": 8,
+      "insufficient_cases_with_unnecessary_citations": 0,
+      "evaluated_insufficient_cases": 4
+    },
+    "latency_seconds": {
+      "mean": 77.682,
+      "median": 61.097,
+      "p95": 186.544,
+      "minimum": 52.784,
+      "maximum": 186.544
+    }
+  },
+  "results": [
+    {
+      "run_number": 1,
+      "case_id": "SUP-09",
+      "category": "message_acknowledgement_failure",
+      "description": "Failed acknowledgements cause message redelivery.",
+      "hypothesis": "Message acknowledgement failures caused messages to be repeatedly redelivered and the number of unacknowledged messages to increase.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        901,
+        902
+      ],
+      "actual_evidence_ids": [
+        901,
+        902
+      ],
+      "rationale": "The logs show that acknowledgement requests were rejected starting at 10:04. Following these rejections, the broker immediately recorded repeated deliveries of the same message IDs, and the count of unacknowledged messages rose sharply from 40 to 12,600 within six minutes. This sequence demonstrates that the failure to acknowledge messages directly caused their redelivery and the subsequent accumulation in the queue.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 157.917,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-10",
+      "category": "cache_stampede",
+      "description": "Simultaneous cache misses overload the database.",
+      "hypothesis": "A cache stampede caused increased database query load and checkout request latency.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        911,
+        912
+      ],
+      "actual_evidence_ids": [
+        911,
+        912
+      ],
+      "rationale": "The evidence directly supports the proposed causal mechanism. Evidence ID 911 shows a cache key expiration at 14:20 with a sharp increase in cache misses from 2 to 1,400 per second, which is the definition of a cache stampede event for that key. Evidence ID 912 corroborates this by showing distributed traces of concurrent cache misses immediately followed by repeated database queries for the same records during the incident interval. The combined observations confirm that the cache miss surge caused increased database load and the resulting latency increase in checkout requests.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 66.239,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-11",
+      "category": "tls_certificate_expiration",
+      "description": "An expired upstream certificate breaks handshakes.",
+      "hypothesis": "The upstream service's expired TLS certificate caused payment requests to fail.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        921,
+        922
+      ],
+      "actual_evidence_ids": [
+        921,
+        922
+      ],
+      "rationale": "The first evidence item confirms that the certificate for api.payments.internal expired at 14:00 UTC and that connections to this specific hostname continued after that time. The second evidence item establishes that starting at 14:01 UTC (immediately following the expiration), payment requests to that same hostname failed specifically due to TLS handshake verification errors indicating an expired certificate, while other upstream services remained unaffected. This direct temporal sequence and component-specific error pattern provide a reasonable basis for the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 63.962,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "SUP-12",
+      "category": "worker_thread_exhaustion",
+      "description": "Blocked workers exhaust the request thread pool.",
+      "hypothesis": "Worker thread exhaustion caused API requests to time out while waiting for an available worker.",
+      "expected_verdict": "supported",
+      "actual_verdict": "supported",
+      "expected_evidence_ids": [
+        931,
+        932
+      ],
+      "actual_evidence_ids": [
+        931,
+        932
+      ],
+      "rationale": "Evidence confirms that the API worker pool was fully occupied with all 64 threads having zero available workers for five minutes during the incident. Traces show these threads were blocked waiting for responses from a downstream inventory service, and incoming requests timed out while queued. Additionally, traces indicate the downstream response delay preceded the exhaustion state. This evidence establishes that worker exhaustion occurred and links it directly to timeouts in the request queue, supporting the proposed causal mechanism.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 62.524,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "supported",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-09",
+      "category": "unmapped_instance_metric",
+      "description": "High CPU is observed on an instance with no request mapping.",
+      "hypothesis": "CPU saturation on api-12 caused checkout failures.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The evidence indicates that traces were reviewed and no mapping was available to associate the failing checkout requests with api-12. Without confirming that the high CPU on api-12 specifically impacted the failing requests, the proposed causal mechanism is not established.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 53.214,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-10",
+      "category": "cache_metric_without_request_link",
+      "description": "A cache hit-rate decline lacks a causal link.",
+      "hypothesis": "The decline in cache hit rate caused the checkout request failures.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The evidence shows a decline in cache hit rate and the occurrence of checkout request failures (HTTP 500 responses). However, the evidence explicitly states that no request-level cache traces or cache error records are available. The observed symptom (failures) is present, but the specific causal mechanism linking the rate decline to the failures is not verified by technical observations within the incident's failed requests. According to verification rules, a reported failure and a concurrent metric change do not establish causation without direct evidence of the proposed mechanism or exclusion of alternatives for those specific requests.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 63.561,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-11",
+      "category": "certificate_event_without_failure_trace",
+      "description": "Certificate renewal overlaps with errors.",
+      "hypothesis": "The certificate renewal process caused the checkout service outage.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The provided evidence shows that the certificate renewal job completed successfully at 16:00 UTC, while checkout errors occurred between 15:55 and 16:10 UTC. However, the successful completion timestamp of the renewal process does not establish when the renewal operation actually began or what state the system was in during the outage window. The evidence confirms a symptom (increased error rate) and the completion of an event, but it lacks data to directly confirm that the renewal process initiated a causal failure mechanism, such as a deployment conflict or resource exhaustion during execution. Since the timing of the start is not explicitly linked to the onset of errors, the hypothesis cannot be fully verified.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 186.544,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "INS-12",
+      "category": "replica_lag_without_request_mapping",
+      "description": "Replica lag is observed without request mapping.",
+      "hypothesis": "Database replica lag caused checkout requests to return stale data.",
+      "expected_verdict": "insufficient",
+      "actual_verdict": "insufficient",
+      "expected_evidence_ids": [],
+      "actual_evidence_ids": [],
+      "rationale": "The evidence confirms that a read replica experienced significant replication lag (approx. 18 seconds) during the incident period and that checkout requests returned inconsistent data. However, the trace evidence explicitly states that it is not identified whether the affected reads were served by the primary database or the read replica. Without confirmation that the specific failed requests utilized the lagging replica, the observed lag cannot be established as the direct cause of the stale data for those specific requests.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 54.44,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "insufficient",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-09",
+      "category": "consumer_remained_healthy",
+      "description": "Consumer health contradicts a crash hypothesis.",
+      "hypothesis": "The inventory consumer crashed and caused the inventory queue backlog.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        981,
+        982
+      ],
+      "actual_evidence_ids": [
+        981,
+        982
+      ],
+      "rationale": "The hypothesis proposes that the inventory consumer crashed and caused a backlog. However, the provided evidence explicitly states that the inventory consumer maintained continuous uptime, succeeded in health checks every five seconds, and no process restart or crash was recorded (Evidence 981). Additionally, evidence shows the consumer continued processing at its normal baseline rate throughout the interval (Evidence 982). These observations directly conflict with the proposed mechanism of a crash causing the backlog, as a crashed process would not exhibit continuous uptime, successful health checks, or normal processing rates.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 59.671,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-10",
+      "category": "tls_certificate_valid",
+      "description": "Valid certificate and successful handshakes.",
+      "hypothesis": "An expired TLS certificate caused payment requests to fail.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        991,
+        992
+      ],
+      "actual_evidence_ids": [
+        991,
+        992
+      ],
+      "rationale": "The hypothesis proposes that an expired TLS certificate caused payment request failures. However, the cited evidence directly conflicts with this mechanism: evidence indicates the certificate remained valid for 30 days after the incident (covering the entire duration), and TLS handshake logs explicitly show successful verification with no expiration or validation errors recorded throughout the incident. These observations rule out the proposed cause.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 55.523,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-11",
+      "category": "cache_capacity_available",
+      "description": "Cache memory metrics rule out memory exhaustion.",
+      "hypothesis": "Cache memory exhaustion caused the product lookup failures.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        1001,
+        1002
+      ],
+      "actual_evidence_ids": [
+        1001,
+        1002
+      ],
+      "rationale": "The cited evidence explicitly states that the cache cluster utilized only 38% of its configured memory capacity throughout the incident and remained below the eviction threshold. Furthermore, no memory-pressure evictions or allocation failures were recorded. These observations directly conflict with the proposed mechanism of 'cache memory exhaustion,' as the system did not reach a state of exhaustion nor experience the associated failure symptoms during the reported period.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 52.784,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    },
+    {
+      "run_number": 1,
+      "case_id": "CON-12",
+      "category": "worker_pool_not_exhausted",
+      "description": "Worker and queue metrics rule out exhaustion.",
+      "hypothesis": "API worker thread exhaustion caused incoming requests to time out.",
+      "expected_verdict": "contradicted",
+      "actual_verdict": "contradicted",
+      "expected_evidence_ids": [
+        1011,
+        1012
+      ],
+      "actual_evidence_ids": [
+        1011,
+        1012
+      ],
+      "rationale": "The hypothesis proposes that API worker thread exhaustion caused request timeouts. However, the cited evidence shows that active worker usage was only between 18 and 26 out of a pool capacity of 64, leaving at least 38 workers available throughout the incident. Additionally, the worker queue remained empty and no timeouts occurred due to waiting for a worker. These observations directly contradict the proposed mechanism of thread exhaustion, as the system had sufficient idle capacity and experienced no queuing delays.",
+      "verdict_correct": true,
+      "evidence_exact_match": true,
+      "evidence_precision": 1.0,
+      "evidence_recall": 1.0,
+      "latency_seconds": 55.81,
+      "error": null,
+      "production_validation_passed": true,
+      "production_validation_error": null,
+      "production_usable_verdict": "contradicted",
+      "production_usable_verdict_correct": true
+    }
+  ]
+}
