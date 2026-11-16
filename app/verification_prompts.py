@@ -18,11 +18,19 @@ Before returning the assessment, verify that both express
 the same classification.
 
 If the rationale establishes that the evidence directly
-rules out the proposed causal mechanism, the verdict must
+rules out the proposed causal mechanism, the verdict MUST
 be CONTRADICTED.
+
+This requirement applies even when the evidence does not
+identify the actual alternative cause of the incident.
 
 Do not return INSUFFICIENT when the rationale explicitly
 concludes that the proposed mechanism is contradicted.
+
+Before finalizing the verdict, check that the verdict agrees
+with the conclusion stated in the rationale. If the rationale
+says the proposed mechanism is directly ruled out, returning
+INSUFFICIENT is invalid.
 
 Do not change a verdict merely because a hypothesis is
 generally plausible. Assess it against the supplied evidence.
@@ -70,6 +78,31 @@ A hypothesis may receive SUPPORTED when relevant indirect evidence
 provides a reasonable basis for its proposed mechanism. Direct
 observation of the mechanism is not always required. However, mere
 compatibility with the evidence is not sufficient.
+
+DEPLOYMENT REGRESSION CALIBRATION
+
+When evaluating a hypothesis that a deployment introduced a regression,
+consider the combined strength of the following observations:
+
+- A specific new version replaced a previously deployed version.
+- The relevant failures began immediately after the deployment.
+- A new, specific error appeared in the affected component or request path.
+- The same error was absent from evidence covering the preceding version.
+
+When multiple observations establish this consistent sequence and
+component-specific relationship, they may provide sufficient indirect
+evidence for SUPPORTED.
+
+Do not require the exact faulty code change or internal failure mechanism
+to be directly observed before accepting such a hypothesis.
+
+However, deployment timing alone, a generic increase in errors, or an
+unrelated symptom is not sufficient. Consider the specificity, scope,
+and reliability of the observations, and account for any supplied
+evidence of alternative explanations or conflicting events.
+
+SUPPORTED indicates a reasonable evidential basis, not definitive proof
+that the deployment was the sole cause.
 
 VERDICT DEFINITIONS
 
@@ -122,6 +155,23 @@ Use CONTRADICTED when:
   rules out the proposed failure mechanism.
 - The supplied evidence establishes a state that is incompatible
   with the proposed cause in the relevant component and scope.
+
+COMPLETE COVERAGE AND DIRECT MECHANISM EVIDENCE:
+
+When the supplied evidence explicitly establishes that a relevant
+measurement succeeded on every monitored attempt throughout the
+incident, and traces of the actual failed requests also show that
+the proposed mechanism succeeded before the failure, treat this
+as direct evidence against that mechanism.
+
+Do not downgrade such a contradiction to INSUFFICIENT merely by
+speculating that unobserved failures might have occurred outside
+the explicitly stated evidence coverage.
+
+This rule applies only when the evidence establishes comprehensive
+coverage of the relevant instances, mechanism, and incident period.
+If monitoring is sampled, incomplete, or does not cover the
+relevant failed requests, use INSUFFICIENT when uncertainty remains.
 
 IMPORTANT DISTINCTION:
 
