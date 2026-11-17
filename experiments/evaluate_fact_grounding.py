@@ -1,4 +1,4 @@
-
+﻿
 import argparse
 import json
 import re
@@ -23,7 +23,7 @@ from experiments.fact_grounding_cases import (
 
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
-DEFAULT_OUTPUT = RESULTS_DIR / "fact_grounding_v4.json"
+DEFAULT_OUTPUT = RESULTS_DIR / "fact_grounding_v5.json"
 
 
 # =============================================================
@@ -187,12 +187,18 @@ def evaluate_information_preservation(
     investigation,
 ) -> dict:
     """
-    Check whether expected information appears across investigation fields.
+    Evaluate whether expected information is fully, partially,
+    or not preserved across investigation output fields.
 
     This metric is separate from observed-fact grounding.
 
-    Information in reported_information, recommended_checks, or unknowns
-    can count as preserved without being counted as a grounded observation.
+    A complete match requires:
+    - All expected match terms.
+    - Every required regex pattern.
+    - No forbidden regex pattern.
+
+    A partial match contains at least one expected match term
+    but does not satisfy all complete-match requirements.
 
     Matching is deterministic and does not establish semantic correctness.
     """
@@ -214,33 +220,106 @@ def evaluate_information_preservation(
         }
         for field_name, items in output_fields.items()
         for item in items
+        if item is not None
     ]
 
     expected_results = []
 
     for index, expected in enumerate(case.expected_facts):
-        matches = [
-            item
-            for item in preserved_items
-            if matches_expected_fact(item["text"], expected)
-        ]
+        candidates = []
+        complete_matches = []
+
+        for item in preserved_items:
+            normalized = normalize_text(item["text"])
+
+            # At least one match term makes this output relevant.
+            has_relevant_term = any(
+                normalize_text(term) in normalized
+                for term in expected.match_terms
+            )
+
+            if not has_relevant_term:
+                continue
+
+            candidates.append(item)
+
+            # A complete match requires every match term.
+            has_all_match_terms = matches_expected_fact(
+                item["text"],
+                expected,
+            )
+
+            # Every required detail must be present.
+            has_required_details = all(
+                re.search(
+                    pattern,
+                    item["text"],
+                    flags=re.IGNORECASE,
+                ) is not None
+                for pattern in expected.required_patterns
+            )
+
+            # Forbidden patterns invalidate a complete match.
+            has_forbidden_content = any(
+                re.search(
+                    pattern,
+                    item["text"],
+                    flags=re.IGNORECASE,
+                ) is not None
+                for pattern in expected.forbidden_patterns
+            )
+
+            if (
+                has_all_match_terms
+                and has_required_details
+                and not has_forbidden_content
+            ):
+                complete_matches.append(item)
+
+        if complete_matches:
+            status = "preserved"
+            selected_matches = complete_matches
+
+        elif candidates:
+            status = "partial"
+            selected_matches = candidates
+
+        else:
+            status = "missing"
+            selected_matches = []
 
         expected_results.append({
             "expected_fact_index": index,
             "match_terms": list(expected.match_terms),
-            "preserved": bool(matches),
+            "status": status,
+            "preserved": status == "preserved",
+            "partially_preserved": status == "partial",
             "matched_fields": sorted({
-                item["field"] for item in matches
+                item["field"] for item in selected_matches
             }),
             "matched_text": [
-                item["text"] for item in matches
+                item["text"] for item in selected_matches
             ],
+            "complete_match_count": len(complete_matches),
+            "partial_match_count": (
+                len(candidates) if status == "partial" else 0
+            ),
         })
 
     expected_count = len(expected_results)
 
     preserved_count = sum(
-        item["preserved"]
+        item["status"] == "preserved"
+        for item in expected_results
+    )
+
+    partial_count = sum(
+        item["status"] == "partial"
+        for item in expected_results
+    )
+
+    missing_count = sum(
+        item["status"] == "missing"
         for item in expected_results
     )
 
@@ -253,7 +332,8 @@ def evaluate_information_preservation(
     return {
         "expected_information_count": expected_count,
         "preserved_information_count": preserved_count,
-        "missing_information_count": expected_count - preserved_count,
+        "partially_preserved_information_count": partial_count,
+        "missing_information_count": missing_count,
         "information_preservation_recall": round(recall, 4),
         "information_items": expected_results,
     }
@@ -580,6 +660,13 @@ def calculate_overall_metrics(results: list[dict]) -> dict:
         for result in successful
     )
 
+    partially_preserved_information = sum(
+        result["information_preservation"][
+            "partially_preserved_information_count"
+        ]
+        for result in successful
+    )
+
     missing_information = sum(
         result["information_preservation"]["missing_information_count"]
         for result in successful
@@ -645,6 +732,9 @@ def calculate_overall_metrics(results: list[dict]) -> dict:
 
         "expected_information": expected_information,
         "preserved_information": preserved_information,
+        "partially_preserved_information": (
+            partially_preserved_information
+        ),
         "missing_information": missing_information,
         "information_preservation_recall": round(
             information_preservation_recall, 4
@@ -664,7 +754,7 @@ def calculate_overall_metrics(results: list[dict]) -> dict:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Run OpsPilot Fact Grounding Evaluation v4."
+        description="Run OpsPilot Fact Grounding Evaluation v5."
     )
 
     parser.add_argument(
@@ -713,7 +803,7 @@ def main():
     client = OllamaClient()
 
     print("=" * 65)
-    print("OPSPILOT FACT GROUNDING EVALUATION V4")
+    print("OPSPILOT FACT GROUNDING EVALUATION V5")
     print("=" * 65)
     print(f"Model: {client.model}")
     print(f"Cases: {len(cases)}")
@@ -750,6 +840,10 @@ def main():
                 f"Information preserved: "
                 f"{preservation['preserved_information_count']}/"
                 f"{preservation['expected_information_count']} | "
+                f"Partial: "
+                f"{preservation['partially_preserved_information_count']} | "
+                f"Missing: "
+                f"{preservation['missing_information_count']} | "
                 f"Latency: {result['latency_seconds']:.2f}s"
             )
 
@@ -769,7 +863,7 @@ def main():
     metrics = calculate_overall_metrics(results)
 
     report = {
-        "benchmark": "OpsPilot Fact Grounding Evaluation v4",
+        "benchmark": "OpsPilot Fact Grounding Evaluation v5",
         "model": client.model,
         "dataset_version": "v3",
         "evaluation_method": (
@@ -782,9 +876,16 @@ def main():
             "is calculated over generated statements. Repeated matches are "
             "reported separately. Information preservation is evaluated "
             "separately across observed_facts, reported_information, "
-            "recommended_checks, and unknowns. Unmatched statements are not "
-            "automatically classified as hallucinations. Both evaluators "
-            "use deterministic lexical matching and are not semantic judges."
+            "recommended_checks, and unknowns. Each expected information "
+            "item is classified as preserved, partial, or missing. A "
+            "preserved item must contain all expected match terms, all "
+            "required regex details, and no forbidden pattern. A partial "
+            "item contains at least one relevant match term but does not "
+            "satisfy all complete-match requirements. Preservation recall "
+            "counts only fully preserved information. Unmatched statements "
+            "are not automatically classified as hallucinations. Both "
+            "evaluators use deterministic lexical matching and are not "
+            "semantic judges."
         ),
         "results": results,
         "metrics": metrics,
@@ -801,7 +902,7 @@ def main():
         )
 
     print("=" * 65)
-    print("FACT GROUNDING V4 SUMMARY")
+    print("FACT GROUNDING V5 SUMMARY")
     print("=" * 65)
 
     print(f"Successful cases: {metrics['successful_cases']}")
@@ -834,6 +935,10 @@ def main():
     print()
     print(f"Expected information: {metrics['expected_information']}")
     print(f"Preserved information: {metrics['preserved_information']}")
+    print(
+        "Partially preserved information: "
+        f"{metrics['partially_preserved_information']}"
+    )
     print(f"Missing information: {metrics['missing_information']}")
     print(
         "Information preservation recall: "

@@ -185,3 +185,124 @@ def test_ai_fact_rejects_empty_evidence_ids():
         pass
     else:
         raise AssertionError("AIFact should reject empty evidence IDs")
+
+
+
+def test_fg05_unknown_statement_is_only_partial_preservation():
+    from experiments.evaluate_fact_grounding import (
+        evaluate_information_preservation,
+    )
+
+    cases = build_fact_grounding_cases()
+    case = next(c for c in cases if c.case_id == "FG-05")
+
+    investigation = AIInvestigationResult(
+        unknowns=[
+            "The specific issue that might require restarting "
+            "the notification service is not described."
+        ]
+    )
+
+    result = evaluate_information_preservation(
+        case=case,
+        investigation=investigation,
+    )
+
+    recommendation = result["information_items"][0]
+    confirmation = result["information_items"][1]
+
+    assert recommendation["status"] == "partial"
+    assert recommendation["preserved"] is False
+
+    assert confirmation["status"] == "partial"
+    assert confirmation["preserved"] is False
+
+    assert result["preserved_information_count"] == 0
+    assert result["partially_preserved_information_count"] == 2
+    assert result["missing_information_count"] == 0
+    assert result["information_preservation_recall"] == 0.0
+
+
+def test_fg05_recommendation_and_confirmation_are_preserved_separately():
+    from experiments.evaluate_fact_grounding import (
+        evaluate_information_preservation,
+    )
+
+    cases = build_fact_grounding_cases()
+    case = next(c for c in cases if c.case_id == "FG-05")
+
+    investigation = AIInvestigationResult(
+        recommended_checks=[
+            "Consider restarting the notification service "
+            "if the issue persists."
+        ],
+        reported_information=[
+            "No restart has been confirmed."
+        ],
+    )
+
+    result = evaluate_information_preservation(
+        case=case,
+        investigation=investigation,
+    )
+
+    recommendation = result["information_items"][0]
+    confirmation = result["information_items"][1]
+
+    assert recommendation["status"] == "preserved"
+    assert confirmation["status"] == "preserved"
+
+    assert result["preserved_information_count"] == 2
+    assert result["partially_preserved_information_count"] == 0
+    assert result["missing_information_count"] == 0
+    assert result["information_preservation_recall"] == 1.0
+
+
+def test_information_preservation_marks_absent_information_as_missing():
+    from experiments.evaluate_fact_grounding import (
+        evaluate_information_preservation,
+    )
+
+    cases = build_fact_grounding_cases()
+    case = next(c for c in cases if c.case_id == "FG-05")
+
+    investigation = AIInvestigationResult(
+        reported_information=[
+            "The service was investigated."
+        ]
+    )
+
+    result = evaluate_information_preservation(
+        case=case,
+        investigation=investigation,
+    )
+
+    assert result["preserved_information_count"] == 0
+    assert result["partially_preserved_information_count"] == 0
+    assert result["missing_information_count"] == 2
+    assert result["information_preservation_recall"] == 0.0
+
+
+def test_overall_metrics_aggregate_partial_information_preservation():
+    results = [
+        {
+            "status": "success",
+            "latency_seconds": 5.0,
+            "information_preservation": {
+                "expected_information_count": 4,
+                "preserved_information_count": 2,
+                "partially_preserved_information_count": 1,
+                "missing_information_count": 1,
+                "information_preservation_recall": 0.5,
+                "information_items": [],
+            },
+        }
+    ]
+
+    metrics = calculate_overall_metrics(results)
+
+    assert metrics["expected_information"] == 4
+    assert metrics["preserved_information"] == 2
+    assert metrics["partially_preserved_information"] == 1
+    assert metrics["missing_information"] == 1
+    assert metrics["information_preservation_recall"] == 0.5
