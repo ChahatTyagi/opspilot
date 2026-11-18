@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import './App.css'
 
@@ -57,6 +58,13 @@ type AIInvestigationResult = {
   hypotheses: AIHypothesis[]
   recommended_checks: string[]
   unknowns: string[]
+}
+
+type InvestigationHistoryRecord = {
+  id: number
+  incident_id: number
+  result: AIInvestigationResult
+  created_at: string
 }
 
 type WorkspacePage = 'overview' | 'incidents'
@@ -134,6 +142,10 @@ function App() {
 
   const [investigationResult, setInvestigationResult] =
     useState<AIInvestigationResult | null>(null)
+  const [investigationHistory, setInvestigationHistory] =
+    useState<InvestigationHistoryRecord[]>([])
+  const [isLoadingInvestigationHistory, setIsLoadingInvestigationHistory] =
+    useState(false)
   const [isInvestigating, setIsInvestigating] = useState(false)
   const [investigationError, setInvestigationError] = useState('')
 
@@ -152,6 +164,7 @@ function App() {
   const [sortOption, setSortOption] =
     useState<IncidentSortOption>('newest')
 
+  // Load incidents when the application starts.
   useEffect(() => {
     let isActive = true
 
@@ -193,6 +206,7 @@ function App() {
     }
   }, [])
 
+  // Load evidence whenever the selected incident changes.
   useEffect(() => {
     if (selectedIncidentId === null) {
       setEvidence([])
@@ -248,6 +262,64 @@ function App() {
     }
   }, [selectedIncidentId])
 
+  // Load persisted AI investigation history whenever an incident is selected.
+  useEffect(() => {
+    if (selectedIncidentId === null) {
+      setInvestigationHistory([])
+      setInvestigationResult(null)
+      setIsLoadingInvestigationHistory(false)
+      setInvestigationError('')
+      return
+    }
+
+    let isActive = true
+
+    async function loadInvestigationHistory() {
+      setInvestigationHistory([])
+      setInvestigationResult(null)
+      setInvestigationError('')
+      setIsLoadingInvestigationHistory(true)
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/incidents/${selectedIncidentId}/investigations`,
+        )
+
+        if (!response.ok) {
+          throw new Error(
+            'Unable to load investigation history. Please try again.',
+          )
+        }
+
+        const history: InvestigationHistoryRecord[] =
+          await response.json()
+
+        if (isActive) {
+          setInvestigationHistory(history)
+          setInvestigationResult(history[0]?.result ?? null)
+        }
+      } catch (requestError) {
+        if (isActive) {
+          setInvestigationError(
+            requestError instanceof Error
+              ? requestError.message
+              : 'Unable to load investigation history.',
+          )
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingInvestigationHistory(false)
+        }
+      }
+    }
+
+    void loadInvestigationHistory()
+
+    return () => {
+      isActive = false
+    }
+  }, [selectedIncidentId])
+
   const filteredIncidents = useMemo(
     () =>
       incidents.filter((incident) => {
@@ -286,8 +358,10 @@ function App() {
   const activeIncidentCount = incidents.filter(
     (incident) => incident.status !== 'resolved',
   ).length
+
   const criticalIncidentCount = incidents.filter(
-    (incident) => incident.severity === 'critical' && incident.status !== 'resolved',
+    (incident) =>
+      incident.severity === 'critical' && incident.status !== 'resolved',
   ).length
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -308,10 +382,12 @@ function App() {
           typeof responseBody?.detail === 'string'
             ? responseBody.detail
             : 'Unable to create incident. Please check the form and try again.'
+
         throw new Error(message)
       }
 
       const createdIncident: Incident = await response.json()
+
       setIncidents((current) => [createdIncident, ...current])
       setForm(emptyForm)
       setIsFormOpen(false)
@@ -347,18 +423,22 @@ function App() {
 
       if (!response.ok) {
         let message = 'Unable to add evidence. Please try again.'
+
         try {
           const errorData = await response.json()
+
           if (typeof errorData.detail === 'string') {
             message = errorData.detail
           }
         } catch {
           // Keep the default error message.
         }
+
         throw new Error(message)
       }
 
       const createdEvidence: IncidentEvidence = await response.json()
+
       setEvidence((current) => [...current, createdEvidence])
       setEvidenceForm(emptyEvidenceForm)
     } catch (submissionError) {
@@ -372,8 +452,11 @@ function App() {
     }
   }
 
+  // Run an AI investigation and refresh its persisted history.
   async function handleInvestigation() {
     if (selectedIncidentId === null || isInvestigating) return
+
+    const incidentId = selectedIncidentId
 
     setIsInvestigating(true)
     setInvestigationError('')
@@ -381,25 +464,51 @@ function App() {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/incidents/${selectedIncidentId}/investigate`,
+        `${API_BASE_URL}/incidents/${incidentId}/investigate`,
         { method: 'POST' },
       )
 
       if (!response.ok) {
         let message = 'Unable to investigate this incident. Please try again.'
+
         try {
           const errorData = await response.json()
+
           if (typeof errorData.detail === 'string') {
             message = errorData.detail
           }
         } catch {
           // Keep the default error message.
         }
+
         throw new Error(message)
       }
 
       const result: AIInvestigationResult = await response.json()
-      setInvestigationResult(result)
+      if (selectedIncidentId === incidentId) {
+        setInvestigationResult(result)
+}
+
+      // Retrieve the newly persisted history.
+      try {
+        const historyResponse = await fetch(
+          `${API_BASE_URL}/incidents/${incidentId}/investigations`,
+        )
+
+        if (historyResponse.ok) {
+          const history: InvestigationHistoryRecord[] =
+            await historyResponse.json()
+
+          // Do not update another incident's screen if the user switched
+          // incidents while this request was running.
+          if (selectedIncidentId === incidentId) {
+            setInvestigationHistory(history)
+            setInvestigationResult(history[0]?.result ?? result)
+          }
+        }
+      } catch {
+        // The investigation succeeded. Keep displaying its result.
+      }
     } catch (requestError) {
       setInvestigationError(
         requestError instanceof Error
@@ -415,7 +524,9 @@ function App() {
     incidentId: number,
     newStatus: Incident['status'],
   ) {
-    const currentIncident = incidents.find((incident) => incident.id === incidentId)
+    const currentIncident = incidents.find(
+      (incident) => incident.id === incidentId,
+    )
 
     if (
       !currentIncident ||
@@ -430,6 +541,7 @@ function App() {
       delete next[incidentId]
       return next
     })
+
     setUpdatingIncidentIds((current) => [...current, incidentId])
 
     try {
@@ -445,10 +557,12 @@ function App() {
           typeof responseBody?.detail === 'string'
             ? responseBody.detail
             : 'Unable to update incident status. Please try again.'
+
         throw new Error(message)
       }
 
       const updatedIncident: Incident = await response.json()
+
       setIncidents((current) =>
         current.map((incident) =>
           incident.id === incidentId ? updatedIncident : incident,
@@ -471,6 +585,7 @@ function App() {
 
   function closeForm() {
     if (isSubmitting) return
+
     setIsFormOpen(false)
     setError('')
   }
@@ -512,7 +627,9 @@ function App() {
                 setIsFormOpen(false)
               }}
             >
-              <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+              <span className="nav-icon" aria-hidden="true">
+                {item.icon}
+              </span>
               {item.label}
             </button>
           ))}
@@ -531,6 +648,7 @@ function App() {
             <span className="breadcrumb-divider">/</span>
             <strong>{breadcrumbLabel}</strong>
           </div>
+
           <div className="topbar-status">
             <span className="status-dot" />
             Incident intelligence
@@ -553,12 +671,17 @@ function App() {
                   <p className="eyebrow">
                     INC-{String(selectedIncident.id).padStart(4, '0')}
                   </p>
+
                   <h1>{selectedIncident.title}</h1>
+
                   <p className="page-description">
                     Incident details and investigation workspace.
                   </p>
                 </div>
-                <span className={`severity-badge severity-${selectedIncident.severity}`}>
+
+                <span
+                  className={`severity-badge severity-${selectedIncident.severity}`}
+                >
                   {selectedIncident.severity}
                 </span>
               </div>
@@ -573,17 +696,23 @@ function App() {
               <div className="overview-grid">
                 <article className="overview-card">
                   <div className="card-label">Affected service</div>
-                  <div className="card-placeholder">{selectedIncident.service}</div>
+                  <div className="card-placeholder">
+                    {selectedIncident.service}
+                  </div>
                 </article>
+
                 <article className="overview-card">
                   <div className="card-label">Environment</div>
                   <div className="card-placeholder">
                     {selectedIncident.environment ?? 'Unknown'}
                   </div>
                 </article>
+
                 <article className="overview-card">
                   <div className="card-label">Current status</div>
-                  <div className="card-placeholder">{selectedIncident.status}</div>
+                  <div className="card-placeholder">
+                    {selectedIncident.status}
+                  </div>
                 </article>
               </div>
 
@@ -595,6 +724,7 @@ function App() {
               <form className="evidence-form" onSubmit={handleEvidenceSubmit}>
                 <div className="form-group">
                   <label htmlFor="evidence-source-type">Evidence type</label>
+
                   <select
                     id="evidence-source-type"
                     value={evidenceForm.source_type}
@@ -615,6 +745,7 @@ function App() {
 
                 <div className="form-group">
                   <label htmlFor="evidence-content">Evidence content</label>
+
                   <textarea
                     id="evidence-content"
                     value={evidenceForm.content}
@@ -629,19 +760,24 @@ function App() {
                     maxLength={20000}
                     required
                   />
+
                   <span className="character-count">
                     {evidenceForm.content.length}/20000 characters
                   </span>
                 </div>
 
                 {evidenceSubmitError && (
-                  <p className="error-message" role="alert">{evidenceSubmitError}</p>
+                  <p className="error-message" role="alert">
+                    {evidenceSubmitError}
+                  </p>
                 )}
 
                 <button
                   type="submit"
                   className="primary-button"
-                  disabled={isSubmittingEvidence || !evidenceForm.content.trim()}
+                  disabled={
+                    isSubmittingEvidence || !evidenceForm.content.trim()
+                  }
                 >
                   {isSubmittingEvidence ? 'Adding evidence...' : 'Add evidence'}
                 </button>
@@ -656,7 +792,9 @@ function App() {
                 {isLoadingEvidence ? (
                   <p className="empty-state">Loading evidence...</p>
                 ) : evidenceLoadError ? (
-                  <p className="error-message" role="alert">{evidenceLoadError}</p>
+                  <p className="error-message" role="alert">
+                    {evidenceLoadError}
+                  </p>
                 ) : evidence.length === 0 ? (
                   <p className="empty-state">
                     No evidence has been added to this incident yet.
@@ -666,9 +804,15 @@ function App() {
                     {evidence.map((item) => (
                       <article className="evidence-card" key={item.id}>
                         <div className="evidence-card-header">
-                          <span className="evidence-source-type">{item.source_type}</span>
-                          <span className="evidence-date">{formatDate(item.created_at)}</span>
+                          <span className="evidence-source-type">
+                            {item.source_type}
+                          </span>
+
+                          <span className="evidence-date">
+                            {formatDate(item.created_at)}
+                          </span>
                         </div>
+
                         <p className="evidence-content">{item.content}</p>
                       </article>
                     ))}
@@ -681,15 +825,49 @@ function App() {
                   type="button"
                   className="primary-button"
                   onClick={handleInvestigation}
-                  disabled={isInvestigating || isLoadingEvidence}
+                  disabled={
+                    isInvestigating ||
+                    isLoadingEvidence ||
+                    isLoadingInvestigationHistory
+                  }
                 >
-                  {isInvestigating ? 'Investigating...' : 'Run AI Investigation'}
+                  {isInvestigating
+                    ? 'Investigating...'
+                    : 'Run AI Investigation'}
                 </button>
               </div>
 
               {investigationError && (
-                <p className="error-message" role="alert">{investigationError}</p>
+                <p className="error-message" role="alert">
+                  {investigationError}
+                </p>
               )}
+
+              {isLoadingInvestigationHistory && (
+                <p className="empty-state">
+                  Loading saved investigation...
+                </p>
+              )}
+
+              {!isLoadingInvestigationHistory &&
+                investigationHistory.length > 0 && (
+                  <p className="page-description">
+                    {investigationHistory.length} saved investigation
+                    {investigationHistory.length === 1 ? '' : 's'}
+                    {' · '}
+                    Latest: {formatDate(investigationHistory[0].created_at)}
+                  </p>
+                )}
+
+              {!isLoadingInvestigationHistory &&
+                !investigationError &&
+                investigationHistory.length === 0 &&
+                !investigationResult && (
+                  <p className="empty-state">
+                    No saved investigations yet. Run an AI investigation to
+                    get started.
+                  </p>
+                )}
 
               {investigationResult && (
                 <section className="investigation-results">
@@ -700,72 +878,98 @@ function App() {
 
                   <div className="investigation-result-group">
                     <h3>Observed Facts</h3>
+
                     {investigationResult.observed_facts.length === 0 ? (
-                      <p className="empty-state">No confirmed facts identified.</p>
+                      <p className="empty-state">
+                        No confirmed facts identified.
+                      </p>
                     ) : (
                       <div className="investigation-list">
-                        {investigationResult.observed_facts.map((fact, index) => (
-                          <article
-                            className="investigation-result-card"
-                            key={`${fact.statement}-${index}`}
-                          >
-                            <p>{fact.statement}</p>
-                            <span>Evidence IDs: {fact.evidence_ids.join(', ')}</span>
-                          </article>
-                        ))}
+                        {investigationResult.observed_facts.map(
+                          (fact, index) => (
+                            <article
+                              className="investigation-result-card"
+                              key={`${fact.statement}-${index}`}
+                            >
+                              <p>{fact.statement}</p>
+                              <span>
+                                Evidence IDs: {fact.evidence_ids.join(', ')}
+                              </span>
+                            </article>
+                          ),
+                        )}
                       </div>
                     )}
                   </div>
 
                   <div className="investigation-result-group">
                     <h3>Possible Causes</h3>
+
                     {investigationResult.hypotheses.length === 0 ? (
-                      <p className="empty-state">No hypotheses generated.</p>
+                      <p className="empty-state">
+                        No hypotheses generated.
+                      </p>
                     ) : (
                       <div className="investigation-list">
-                        {investigationResult.hypotheses.map((hypothesis, index) => (
-                          <article
-                            className="investigation-result-card"
-                            key={`${hypothesis.explanation}-${index}`}
-                          >
-                            <p>{hypothesis.explanation}</p>
-                            <span className={`confidence-badge confidence-${hypothesis.confidence}`}>
-                              {hypothesis.confidence.toUpperCase()} confidence
-                            </span>
-                            <span>
-                              Supporting evidence IDs:{' '}
-                              {hypothesis.supporting_evidence_ids.length > 0
-                                ? hypothesis.supporting_evidence_ids.join(', ')
-                                : 'None'}
-                            </span>
-                          </article>
-                        ))}
+                        {investigationResult.hypotheses.map(
+                          (hypothesis, index) => (
+                            <article
+                              className="investigation-result-card"
+                              key={`${hypothesis.explanation}-${index}`}
+                            >
+                              <p>{hypothesis.explanation}</p>
+
+                              <span
+                                className={`confidence-badge confidence-${hypothesis.confidence}`}
+                              >
+                                {hypothesis.confidence.toUpperCase()} confidence
+                              </span>
+
+                              <span>
+                                Supporting evidence IDs:{' '}
+                                {hypothesis.supporting_evidence_ids.length > 0
+                                  ? hypothesis.supporting_evidence_ids.join(', ')
+                                  : 'None'}
+                              </span>
+                            </article>
+                          ),
+                        )}
                       </div>
                     )}
                   </div>
 
                   <div className="investigation-result-group">
                     <h3>Recommended Checks</h3>
+
                     {investigationResult.recommended_checks.length === 0 ? (
-                      <p className="empty-state">No additional checks recommended.</p>
+                      <p className="empty-state">
+                        No additional checks recommended.
+                      </p>
                     ) : (
                       <ul>
-                        {investigationResult.recommended_checks.map((check, index) => (
-                          <li key={`${check}-${index}`}>{check}</li>
-                        ))}
+                        {investigationResult.recommended_checks.map(
+                          (check, index) => (
+                            <li key={`${check}-${index}`}>{check}</li>
+                          ),
+                        )}
                       </ul>
                     )}
                   </div>
 
                   <div className="investigation-result-group">
                     <h3>Unknowns and Evidence Gaps</h3>
+
                     {investigationResult.unknowns.length === 0 ? (
-                      <p className="empty-state">No additional unknowns reported.</p>
+                      <p className="empty-state">
+                        No additional unknowns reported.
+                      </p>
                     ) : (
                       <ul>
-                        {investigationResult.unknowns.map((unknown, index) => (
-                          <li key={`${unknown}-${index}`}>{unknown}</li>
-                        ))}
+                        {investigationResult.unknowns.map(
+                          (unknown, index) => (
+                            <li key={`${unknown}-${index}`}>{unknown}</li>
+                          ),
+                        )}
                       </ul>
                     )}
                   </div>
@@ -779,9 +983,11 @@ function App() {
                   <p className="eyebrow">INCIDENT OPERATIONS</p>
                   <h1>Incident overview</h1>
                   <p className="page-description">
-                    Monitor incidents and investigate operational issues with evidence and AI-assisted insights.
+                    Monitor incidents and investigate operational issues with
+                    evidence and AI-assisted insights.
                   </p>
                 </div>
+
                 <button
                   className="primary-button"
                   type="button"
@@ -795,11 +1001,15 @@ function App() {
               </div>
 
               <div className="welcome-panel">
-                <div className="welcome-icon" aria-hidden="true">✦</div>
+                <div className="welcome-icon" aria-hidden="true">
+                  ✦
+                </div>
+
                 <div>
                   <h2>Your incident workspace</h2>
                   <p>
-                    Track operational issues, attach evidence, and run AI-assisted investigations from one place.
+                    Track operational issues, attach evidence, and run
+                    AI-assisted investigations from one place.
                   </p>
                 </div>
               </div>
@@ -817,6 +1027,7 @@ function App() {
                   </div>
                   <p>Incidents registered in OpsPilot</p>
                 </article>
+
                 <article className="overview-card">
                   <div className="card-label">Active incidents</div>
                   <div className="card-placeholder">
@@ -824,6 +1035,7 @@ function App() {
                   </div>
                   <p>Open or currently being investigated</p>
                 </article>
+
                 <article className="overview-card">
                   <div className="card-label">Unresolved critical</div>
                   <div className="card-placeholder">
@@ -833,23 +1045,30 @@ function App() {
                 </article>
               </div>
 
-              {loadError && <p className="form-error" role="alert">{loadError}</p>}
+              {loadError && (
+                <p className="form-error" role="alert">
+                  {loadError}
+                </p>
+              )}
 
               {isLoadingIncidents && (
                 <p className="page-description">Loading incidents...</p>
               )}
 
-              {!isLoadingIncidents && !loadError && incidents.length === 0 && (
-                <div className="section-heading">
-                  <h2>No incidents yet</h2>
-                  <span>Create your first incident to get started.</span>
-                </div>
-              )}
+              {!isLoadingIncidents &&
+                !loadError &&
+                incidents.length === 0 && (
+                  <div className="section-heading">
+                    <h2>No incidents yet</h2>
+                    <span>Create your first incident to get started.</span>
+                  </div>
+                )}
 
               {!isLoadingIncidents && incidents.length > 0 && (
                 <section className="incident-list-section">
                   <div className="section-heading">
                     <h2>Recent incidents</h2>
+
                     <button
                       className="secondary-button"
                       type="button"
@@ -858,6 +1077,7 @@ function App() {
                       View all incidents
                     </button>
                   </div>
+
                   <div className="incident-list">
                     {[...incidents]
                       .sort(
@@ -874,7 +1094,10 @@ function App() {
                           role="button"
                           tabIndex={0}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
+                            if (
+                              event.key === 'Enter' ||
+                              event.key === ' '
+                            ) {
                               event.preventDefault()
                               openIncident(incident.id)
                             }
@@ -887,15 +1110,24 @@ function App() {
                               </span>
                               <h3>{incident.title}</h3>
                             </div>
-                            <span className={`severity-badge severity-${incident.severity}`}>
+
+                            <span
+                              className={`severity-badge severity-${incident.severity}`}
+                            >
                               {incident.severity}
                             </span>
                           </div>
-                          <p className="incident-description">{incident.description}</p>
+
+                          <p className="incident-description">
+                            {incident.description}
+                          </p>
+
                           <div className="incident-meta">
                             <span>Service: {incident.service}</span>
                             <span>Status: {incident.status}</span>
-                            <span>Environment: {incident.environment ?? 'Unknown'}</span>
+                            <span>
+                              Environment: {incident.environment ?? 'Unknown'}
+                            </span>
                           </div>
                         </article>
                       ))}
@@ -913,6 +1145,7 @@ function App() {
                     Browse, filter, prioritize, and update reported incidents.
                   </p>
                 </div>
+
                 <button
                   className="primary-button"
                   type="button"
@@ -925,7 +1158,12 @@ function App() {
                 </button>
               </div>
 
-              {loadError && <p className="form-error" role="alert">{loadError}</p>}
+              {loadError && (
+                <p className="form-error" role="alert">
+                  {loadError}
+                </p>
+              )}
+
               {isLoadingIncidents ? (
                 <p className="page-description">Loading incidents...</p>
               ) : incidents.length === 0 ? (
@@ -937,7 +1175,9 @@ function App() {
                 <section className="incident-list-section">
                   <div className="section-heading">
                     <h2>All incidents</h2>
-                    <span>{displayedIncidents.length} of {incidents.length} shown</span>
+                    <span>
+                      {displayedIncidents.length} of {incidents.length} shown
+                    </span>
                   </div>
 
                   <div className="incident-filters">
@@ -946,7 +1186,9 @@ function App() {
                       <select
                         value={statusFilter}
                         onChange={(event) =>
-                          setStatusFilter(event.target.value as IncidentStatusFilter)
+                          setStatusFilter(
+                            event.target.value as IncidentStatusFilter,
+                          )
                         }
                       >
                         <option value="all">All statuses</option>
@@ -955,12 +1197,15 @@ function App() {
                         <option value="resolved">Resolved</option>
                       </select>
                     </label>
+
                     <label>
                       Severity
                       <select
                         value={severityFilter}
                         onChange={(event) =>
-                          setSeverityFilter(event.target.value as IncidentSeverityFilter)
+                          setSeverityFilter(
+                            event.target.value as IncidentSeverityFilter,
+                          )
                         }
                       >
                         <option value="all">All severities</option>
@@ -970,12 +1215,15 @@ function App() {
                         <option value="low">Low</option>
                       </select>
                     </label>
+
                     <label>
                       Environment
                       <select
                         value={environmentFilter}
                         onChange={(event) =>
-                          setEnvironmentFilter(event.target.value as IncidentEnvironmentFilter)
+                          setEnvironmentFilter(
+                            event.target.value as IncidentEnvironmentFilter,
+                          )
                         }
                       >
                         <option value="all">All environments</option>
@@ -984,25 +1232,34 @@ function App() {
                         <option value="development">Development</option>
                       </select>
                     </label>
+
                     <label>
                       Sort by
                       <select
                         value={sortOption}
                         onChange={(event) =>
-                          setSortOption(event.target.value as IncidentSortOption)
+                          setSortOption(
+                            event.target.value as IncidentSortOption,
+                          )
                         }
                       >
                         <option value="newest">Newest first</option>
                         <option value="oldest">Oldest first</option>
-                        <option value="severity-high">Severity: highest first</option>
-                        <option value="severity-low">Severity: lowest first</option>
+                        <option value="severity-high">
+                          Severity: highest first
+                        </option>
+                        <option value="severity-low">
+                          Severity: lowest first
+                        </option>
                       </select>
                     </label>
                   </div>
 
                   <div className="incident-list">
                     {displayedIncidents.map((incident) => {
-                      const isUpdating = updatingIncidentIds.includes(incident.id)
+                      const isUpdating = updatingIncidentIds.includes(
+                        incident.id,
+                      )
 
                       return (
                         <article
@@ -1012,7 +1269,10 @@ function App() {
                           role="button"
                           tabIndex={0}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
+                            if (
+                              event.key === 'Enter' ||
+                              event.key === ' '
+                            ) {
                               event.preventDefault()
                               openIncident(incident.id)
                             }
@@ -1025,17 +1285,24 @@ function App() {
                               </span>
                               <h3>{incident.title}</h3>
                             </div>
-                            <span className={`severity-badge severity-${incident.severity}`}>
+
+                            <span
+                              className={`severity-badge severity-${incident.severity}`}
+                            >
                               {incident.severity}
                             </span>
                           </div>
 
-                          <p className="incident-description">{incident.description}</p>
+                          <p className="incident-description">
+                            {incident.description}
+                          </p>
 
                           <div className="incident-meta">
                             <span>Service: {incident.service}</span>
+
                             <label className="incident-status-control">
                               <span>Status:</span>
+
                               <select
                                 value={incident.status}
                                 disabled={isUpdating}
@@ -1050,12 +1317,22 @@ function App() {
                                 aria-label={`Status for incident ${incident.id}`}
                               >
                                 <option value="open">Open</option>
-                                <option value="investigating">Investigating</option>
+                                <option value="investigating">
+                                  Investigating
+                                </option>
                                 <option value="resolved">Resolved</option>
                               </select>
-                              {isUpdating && <span className="status-saving">Saving...</span>}
+
+                              {isUpdating && (
+                                <span className="status-saving">
+                                  Saving...
+                                </span>
+                              )}
                             </label>
-                            <span>Environment: {incident.environment ?? 'Unknown'}</span>
+
+                            <span>
+                              Environment: {incident.environment ?? 'Unknown'}
+                            </span>
                           </div>
 
                           {statusUpdateErrors[incident.id] && (
@@ -1095,6 +1372,7 @@ function App() {
                 <h2 id="incident-form-title">Create an incident</h2>
                 <p>Provide the initial details for investigation.</p>
               </div>
+
               <button
                 className="modal-close-button"
                 type="button"
@@ -1112,7 +1390,10 @@ function App() {
                 <input
                   value={form.title}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, title: event.target.value }))
+                    setForm((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
                   }
                   minLength={3}
                   maxLength={150}
@@ -1145,7 +1426,10 @@ function App() {
                   <input
                     value={form.service}
                     onChange={(event) =>
-                      setForm((current) => ({ ...current, service: event.target.value }))
+                      setForm((current) => ({
+                        ...current,
+                        service: event.target.value,
+                      }))
                     }
                     minLength={2}
                     maxLength={100}
@@ -1153,6 +1437,7 @@ function App() {
                     placeholder="e.g. checkout-api"
                   />
                 </label>
+
                 <label>
                   Environment
                   <select
@@ -1171,6 +1456,7 @@ function App() {
                     <option value="development">Development</option>
                   </select>
                 </label>
+
                 <label>
                   Severity
                   <select
@@ -1190,7 +1476,11 @@ function App() {
                 </label>
               </div>
 
-              {error && <p className="form-error" role="alert">{error}</p>}
+              {error && (
+                <p className="form-error" role="alert">
+                  {error}
+                </p>
+              )}
 
               <div className="form-actions">
                 <button
@@ -1201,7 +1491,12 @@ function App() {
                 >
                   Cancel
                 </button>
-                <button className="primary-button" type="submit" disabled={isSubmitting}>
+
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? 'Creating...' : 'Create incident'}
                 </button>
               </div>
