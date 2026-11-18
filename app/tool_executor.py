@@ -3,6 +3,7 @@ import json
 from typing import Any, Sequence
 
 from app.investigation_tools import search_incident_evidence
+from app.topology_investigation import get_incident_service_topology
 
 
 MAX_TOOL_CALLS = 5
@@ -40,12 +41,13 @@ class InvestigationToolExecutor:
         self.call_count = 0
         self.seen_calls = set()
 
-        # Track only evidence IDs actually returned by successful searches.
         self.returned_evidence_ids: set[int] = set()
 
-        # Explicit allowlist: no dynamic imports, eval, shell, or arbitrary code.
         self._tools = {
             "search_incident_evidence": self._search_incident_evidence,
+            "get_incident_service_topology": (
+                self._get_incident_service_topology
+            ),
         }
 
     def execute(
@@ -77,7 +79,9 @@ class InvestigationToolExecutor:
         except (TypeError, ValueError):
             return {
                 "ok": False,
-                "error": "Tool arguments must contain JSON-compatible values.",
+                "error": (
+                    "Tool arguments must contain JSON-compatible values."
+                ),
             }
 
         if len(serialized_arguments) > MAX_ARGUMENTS_LENGTH:
@@ -90,28 +94,42 @@ class InvestigationToolExecutor:
             if set(arguments) != {"query"}:
                 return {
                     "ok": False,
-                    "error": "Invalid arguments for search_incident_evidence.",
+                    "error": (
+                        "Invalid arguments for search_incident_evidence."
+                    ),
                 }
 
-            if not isinstance(arguments["query"], str):
+            query = arguments["query"]
+
+            if not isinstance(query, str):
                 return {
                     "ok": False,
                     "error": "Tool argument 'query' must be a string.",
                 }
 
-            if not arguments["query"].strip():
+            if not query.strip():
                 return {
                     "ok": False,
                     "error": "Search query cannot be empty.",
                 }
 
-            if len(arguments["query"]) > MAX_SEARCH_QUERY_LENGTH:
+            if len(query) > MAX_SEARCH_QUERY_LENGTH:
                 return {
                     "ok": False,
                     "error": (
                         f"Search query cannot exceed "
                         f"{MAX_SEARCH_QUERY_LENGTH} characters. "
                         "Use a short, focused keyword or phrase."
+                    ),
+                }
+
+        elif tool_name == "get_incident_service_topology":
+            if arguments:
+                return {
+                    "ok": False,
+                    "error": (
+                        "get_incident_service_topology "
+                        "does not accept arguments."
                     ),
                 }
 
@@ -140,7 +158,6 @@ class InvestigationToolExecutor:
                 "error": "Tool request could not be processed.",
             }
         except Exception:
-            # Do not expose internal exception details to the model.
             return {
                 "ok": False,
                 "error": "Tool execution failed.",
@@ -152,17 +169,15 @@ class InvestigationToolExecutor:
         }
 
     def _search_incident_evidence(self, arguments: dict) -> dict:
-        """Search evidence for this incident and track returned evidence IDs."""
+        """Search evidence and track returned evidence IDs."""
 
         if self.evidence_retriever is None:
-            # Backwards-compatible lexical search.
             results = search_incident_evidence(
                 query=arguments["query"],
                 incident_id=self.incident_id,
                 evidence_items=self.evidence_items,
             )
         else:
-            # Enforce incident isolation before semantic retrieval.
             scoped_evidence = [
                 item
                 for item in self.evidence_items
@@ -201,5 +216,29 @@ class InvestigationToolExecutor:
 
         return {
             "results": results,
+            "new_evidence_ids": sorted(new_evidence_ids),
+        }
+
+    def _get_incident_service_topology(
+        self,
+        arguments: dict,
+    ) -> dict:
+        """Return bounded topology and track its supporting evidence."""
+
+        result = get_incident_service_topology(
+            incident_id=self.incident_id,
+            evidence_items=self.evidence_items,
+        )
+
+        current_evidence_ids = set(result["evidence_ids"])
+
+        new_evidence_ids = (
+            current_evidence_ids - self.returned_evidence_ids
+        )
+
+        self.returned_evidence_ids.update(current_evidence_ids)
+
+        return {
+            "topology": result["topology"],
             "new_evidence_ids": sorted(new_evidence_ids),
         }

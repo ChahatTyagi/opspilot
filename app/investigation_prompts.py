@@ -374,3 +374,57 @@ TOOL RULES:
 
 Do not produce the final investigation in this phase.
 """
+
+
+INVESTIGATION_INSTRUCTIONS += """
+
+10. SERVICE TOPOLOGY AND DEPENDENCY REASONING
+
+- The get_incident_service_topology tool provides a derived service
+  dependency graph based on trace spans belonging to this incident.
+- Use this tool when service dependencies, upstream failures,
+  downstream failures, or cross-service request paths are relevant.
+- A graph edge from service A to service B represents a parent span
+  in service A and a child span in service B within the same trace.
+- Do not infer a dependency from service names alone.
+- Use the direction of the edge when describing upstream and
+  downstream relationships.
+- Node statistics describe observed spans for that service.
+- Edge call_count describes observed parent-child relationships.
+- Edge error_count describes child spans with error status.
+- Average duration describes the available child-span durations
+  used by the topology calculation. Do not call it a percentile
+  or maximum.
+- A topology relationship establishes an observed trace relationship,
+  not that the upstream service caused the downstream failure.
+- Correlation between an upstream error and a downstream error
+  does not independently prove causation.
+- Cite evidence IDs supplied by topology results when making
+  topology-derived observations.
+- Topology evidence IDs are valid incident evidence references.
+- Do not invent missing services, edges, or measurements.
+- If the topology is truncated, acknowledge that the graph is partial.
+- If no valid trace topology is available, state that trace-based
+  dependency information is unavailable. Do not conclude that
+  no dependencies exist.
+- Combine topology findings with relevant logs and other evidence
+  before proposing a causal hypothesis.
+- A topology-derived hypothesis must still pass independent
+  evidence verification.
+"""
+
+TOOL_SELECTION_INSTRUCTIONS += """
+
+SERVICE TOPOLOGY TOOL:
+
+- You may also use get_incident_service_topology.
+- Use it when trace-based service dependencies or upstream/downstream
+  relationships could help investigate the incident.
+- It accepts no arguments.
+- Inspect the returned graph before deciding whether further
+  evidence searches are useful.
+- A dependency relationship does not prove causation.
+- Use evidence search as well when additional logs or measurements
+  are needed.
+- Do not call the topology tool repeatedly.
+"""

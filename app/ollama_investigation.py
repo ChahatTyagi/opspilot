@@ -1,3 +1,4 @@
+
 import json
 
 from pydantic import ValidationError
@@ -42,7 +43,28 @@ OLLAMA_TOOLS = [
                 "additionalProperties": False,
             },
         },
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_incident_service_topology",
+            "description": (
+                "Retrieve the bounded service dependency graph for this "
+                "incident from its trace spans. Use when investigating "
+                "upstream or downstream failures, service dependencies, "
+                "or cross-service request paths. Results include service "
+                "nodes, parent-to-child edges, call counts, error counts, "
+                "durations, and supporting evidence IDs. No arguments "
+                "are required."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 
@@ -119,8 +141,6 @@ def generate_ollama_investigation_with_tools(
     if client is None:
         client = OllamaClient()
 
-    # Phase 1 uses a compact prompt so the model can focus on
-    # deciding whether additional evidence should be retrieved.
     messages = [
         {
             "role": "system",
@@ -135,13 +155,7 @@ def generate_ollama_investigation_with_tools(
     tool_call_count = 0
 
     def generate_final_result() -> AIInvestigationResult:
-        """
-        Generate the final investigation using the full instructions.
-
-        Preserve the incident context and the complete tool conversation,
-        but replace the short tool-selection system prompt with the
-        comprehensive investigation instructions.
-        """
+        """Generate the final structured investigation."""
 
         final_messages = list(messages)
 
@@ -158,9 +172,6 @@ def generate_ollama_investigation_with_tools(
         return _parse_investigation_response(final_response)
 
     while True:
-        # Phase 1: Ask the model whether additional evidence is needed.
-        # Do not pass a JSON schema here because structured-output mode
-        # previously interfered with tool selection in this setup.
         response = client.chat(
             messages=list(messages),
             tools=OLLAMA_TOOLS,
@@ -178,8 +189,6 @@ def generate_ollama_investigation_with_tools(
         if not isinstance(tool_calls, list):
             raise ValueError("Ollama returned malformed tool calls")
 
-        # No additional search requested. Generate the final
-        # structured investigation using the complete instructions.
         if not tool_calls:
             return generate_final_result()
 
@@ -216,7 +225,6 @@ def generate_ollama_investigation_with_tools(
                                 "error": (
                                     "Search stopped because the previous "
                                     "search returned no new evidence. "
-                                    "No further searches are permitted. "
                                     "Produce the final investigation using "
                                     "the evidence already available."
                                 ),
@@ -236,7 +244,7 @@ def generate_ollama_investigation_with_tools(
                                 "ok": False,
                                 "error": (
                                     "Tool-call limit reached. No further "
-                                    "searches are permitted. Produce the "
+                                    "tool calls are permitted. Produce the "
                                     "final investigation using the evidence "
                                     "already available."
                                 ),
@@ -264,11 +272,12 @@ def generate_ollama_investigation_with_tools(
             returned_results = result.get("results", [])
             new_evidence_ids = result.get("new_evidence_ids", [])
 
-            if returned_results and not new_evidence_ids:
+            if (
+                tool_name == "search_incident_evidence"
+                and returned_results
+                and not new_evidence_ids
+            ):
                 stop_searching = True
 
-        # Preserve the existing stopping rules.
-        # Once searching stops or the call limit is reached,
-        # generate the final structured investigation.
         if stop_searching or tool_call_count >= executor.max_calls:
             return generate_final_result()

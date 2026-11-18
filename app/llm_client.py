@@ -134,7 +134,7 @@ def generate_investigation_with_tools(
     executor: InvestigationToolExecutor,
     client: OpenAI | None = None,
 ) -> AIInvestigationResult:
-    """Generate an investigation while allowing bounded evidence-search calls."""
+    """Generate an investigation using bounded incident tools."""
 
     if client is None:
         client = create_openai_client()
@@ -164,7 +164,27 @@ def generate_investigation_with_tools(
                 "additionalProperties": False,
             },
             "strict": True,
-        }
+        },
+        {
+            "type": "function",
+            "name": "get_incident_service_topology",
+            "description": (
+                "Retrieve the service dependency graph derived from this "
+                "incident's trace spans. Use this when investigating "
+                "upstream or downstream service failures, cross-service "
+                "request paths, or dependencies. The graph includes "
+                "parent-to-child relationships, call counts, error counts, "
+                "durations, and supporting evidence IDs. This tool accepts "
+                "no arguments."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
     ]
 
     response = client.responses.parse(
