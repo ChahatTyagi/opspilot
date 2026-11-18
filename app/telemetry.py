@@ -290,13 +290,15 @@ def build_service_topology(
     processed = 0
 
     for evidence in evidence_items:
+        # Non-trace evidence must not consume the topology span limit.
+        if getattr(evidence, "source_type", None) != "trace":
+            continue
+
+        # Bound the amount of trace evidence processed.
         if processed >= MAX_TOPOLOGY_SPANS:
             break
 
         processed += 1
-
-        if getattr(evidence, "source_type", None) != "trace":
-            continue
 
         content = getattr(evidence, "content", None)
 
@@ -340,7 +342,7 @@ def build_service_topology(
 
         evidence_id = getattr(evidence, "id", None)
 
-        if not isinstance(evidence_id, int):
+        if not isinstance(evidence_id, int) or isinstance(evidence_id, bool):
             continue
 
         # Ignore duplicate span identities before updating statistics.
@@ -465,7 +467,6 @@ def build_service_topology(
         "edges": serialized_edges,
         "trace_count": len(trace_ids),
     }
-
 
 def _is_hex_identifier(value: str) -> bool:
     """Return whether a string contains only hexadecimal characters."""

@@ -267,3 +267,53 @@ def test_topology_does_not_count_duplicate_span_identity_twice():
     assert result["nodes"][0]["error_count"] == 0
     assert result["nodes"][0]["evidence_ids"] == [10]
     assert result["trace_count"] == 1
+
+
+
+def test_topology_span_limit_does_not_count_non_trace_evidence():
+    from app.telemetry import MAX_TOPOLOGY_SPANS
+
+    non_trace_evidence = [
+        make_evidence(
+            index,
+            {"message": "Database timeout"},
+            source_type="log",
+        )
+        for index in range(MAX_TOPOLOGY_SPANS)
+    ]
+
+    parent = {
+        "schema_version": 1,
+        "signal": "trace",
+        "trace_id": "1" * 32,
+        "span_id": "a" * 16,
+        "parent_span_id": None,
+        "service_name": "checkout",
+        "status_code": 0,
+        "duration_ms": 4.0,
+    }
+
+    child = {
+        "schema_version": 1,
+        "signal": "trace",
+        "trace_id": "1" * 32,
+        "span_id": "b" * 16,
+        "parent_span_id": "a" * 16,
+        "service_name": "payment",
+        "status_code": 2,
+        "duration_ms": 2.0,
+    }
+
+    result = build_service_topology(
+        non_trace_evidence
+        + [
+            make_evidence(MAX_TOPOLOGY_SPANS + 1, parent),
+            make_evidence(MAX_TOPOLOGY_SPANS + 2, child),
+        ]
+    )
+
+    assert len(result["nodes"]) == 2
+    assert len(result["edges"]) == 1
+    assert result["trace_count"] == 1
+    assert result["edges"][0]["source"] == "checkout"
+    assert result["edges"][0]["target"] == "payment"
