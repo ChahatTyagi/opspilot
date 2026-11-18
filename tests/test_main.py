@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from unittest.mock import patch
 from openai import RateLimitError
+from app.ai_models import AIInvestigationResult
 from app.database import Base, get_db
-from app.db_models import IncidentEvidence, IncidentRecord
+from app.db_models import (
+    IncidentEvidence,
+    IncidentInvestigation,
+    IncidentRecord,
+)
 from app.main import app
 from app.ollama_client import OllamaRequestError
 from app.investigation_service import UnsupportedLLMProviderError
@@ -1057,9 +1062,9 @@ def test_get_investigation_report_for_missing_incident():
 
     assert response.status_code == 404
 
+
 def test_run_ai_investigation_endpoint(monkeypatch):
     from app.ai_models import (
-        AIConfidence,
         AIFact,
         AIInvestigationResult,
     )
@@ -1085,11 +1090,13 @@ def test_run_ai_investigation_endpoint(monkeypatch):
     )
     assert evidence_response.status_code == 201
 
+    evidence_id = evidence_response.json()["id"]
+
     expected_result = AIInvestigationResult(
         observed_facts=[
             AIFact(
                 statement="Database connection failures were observed.",
-                evidence_ids=[evidence_response.json()["id"]],
+                evidence_ids=[evidence_id],
             )
         ],
         hypotheses=[],
@@ -1100,8 +1107,14 @@ def test_run_ai_investigation_endpoint(monkeypatch):
     captured = {}
 
     def fake_investigation(*, incident, evidence):
-        captured["incident"] = incident
-        captured["evidence"] = evidence
+        captured["incident_id"] = incident.id
+        captured["evidence_ids"] = [
+            item.id for item in evidence
+        ]
+        captured["evidence_contents"] = [
+            item.content for item in evidence
+        ]
+
         return expected_result
 
     monkeypatch.setattr(
@@ -1114,15 +1127,21 @@ def test_run_ai_investigation_endpoint(monkeypatch):
     )
 
     assert response.status_code == 200
+
     data = response.json()
+
     assert data["observed_facts"][0]["evidence_ids"] == [
-        evidence_response.json()["id"]
+        evidence_id
     ]
     assert data["recommended_checks"] == [
         "Check database connectivity."
     ]
-    assert captured["incident"].id == incident_id
-    assert len(captured["evidence"]) == 1
+
+    assert captured["incident_id"] == incident_id
+    assert captured["evidence_ids"] == [evidence_id]
+    assert captured["evidence_contents"] == [
+        "ERROR database connection failed"
+    ]
 
 
 def test_run_ai_investigation_endpoint_missing_incident():
@@ -1299,3 +1318,278 @@ def test_run_ai_investigation_endpoint_handles_exhausted_api_quota(
         "AI investigation is unavailable because the OpenAI API "
         "account has no remaining credits. Check API billing."
     )
+
+
+
+def test_successful_investigation_is_persisted(monkeypatch):
+    from app.ai_models import (
+        AIFact,
+        AIInvestigationResult,
+    )
+
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Database connection failures",
+            "description": "Database requests are failing.",
+            "service": "payment-service",
+            "severity": "high",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    evidence_response = client.post(
+        f"/incidents/{incident_id}/evidence",
+        json={
+            "source_type": "log",
+            "content": "ERROR database connection failed",
+        },
+    )
+    assert evidence_response.status_code == 201
+    evidence_id = evidence_response.json()["id"]
+
+    expected_result = AIInvestigationResult(
+        observed_facts=[
+            AIFact(
+                statement="Database connection failures were observed.",
+                evidence_ids=[evidence_id],
+            )
+        ],
+        recommended_checks=["Check database connectivity."],
+    )
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        lambda **kwargs: expected_result,
+    )
+
+    response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert response.status_code == 200
+
+    with TestSessionLocal() as db:
+        saved = db.query(IncidentInvestigation).filter_by(
+            incident_id=incident_id
+        ).all()
+
+        assert len(saved) == 1
+        assert saved[0].result == expected_result.model_dump(
+            mode="json"
+        )
+
+
+def test_repeated_investigations_create_separate_history_records(
+    monkeypatch,
+):
+    from app.ai_models import AIInvestigationResult
+
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Repeated investigation test",
+            "description": "Testing investigation history.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    first_result = AIInvestigationResult(
+        recommended_checks=["Check database connectivity."]
+    )
+    second_result = AIInvestigationResult(
+        recommended_checks=["Inspect recent deployments."]
+    )
+
+    results = iter([first_result, second_result])
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        lambda **kwargs: next(results),
+    )
+
+    first_response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+    second_response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    with TestSessionLocal() as db:
+        saved = (
+            db.query(IncidentInvestigation)
+            .filter_by(incident_id=incident_id)
+            .order_by(IncidentInvestigation.id)
+            .all()
+        )
+
+        assert len(saved) == 2
+        assert saved[0].result["recommended_checks"] == [
+            "Check database connectivity."
+        ]
+        assert saved[1].result["recommended_checks"] == [
+            "Inspect recent deployments."
+        ]
+
+
+def test_failed_investigation_is_not_persisted(monkeypatch):
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Failed investigation test",
+            "description": "Testing failed AI investigation.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    incident_id = incident_response.json()["id"]
+
+    def fail_investigation(**kwargs):
+        raise ValueError("Invalid evidence reference")
+
+    monkeypatch.setattr(
+        "app.main.run_ai_investigation",
+        fail_investigation,
+    )
+
+    response = client.post(
+        f"/incidents/{incident_id}/investigate"
+    )
+
+    assert response.status_code == 422
+
+    with TestSessionLocal() as db:
+        saved = (
+            db.query(IncidentInvestigation)
+            .filter_by(incident_id=incident_id)
+            .all()
+        )
+
+        assert saved == []
+
+
+
+def test_deleting_incident_deletes_its_investigation_history():
+    from app.ai_models import AIInvestigationResult
+
+    with TestSessionLocal() as db:
+        incident = IncidentRecord(
+            title="Incident deletion test",
+            description="Testing investigation history cascade.",
+            service="payment",
+            environment="test",
+            severity="high",
+        )
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
+
+        investigation = IncidentInvestigation(
+            incident_id=incident.id,
+            result=AIInvestigationResult(
+                recommended_checks=["Check database connectivity."]
+            ).model_dump(mode="json"),
+        )
+        db.add(investigation)
+        db.commit()
+
+        incident_id = incident.id
+        investigation_id = investigation.id
+
+        db.delete(incident)
+        db.commit()
+
+        saved_investigation = db.get(
+            IncidentInvestigation,
+            investigation_id,
+        )
+
+        assert saved_investigation is None
+
+
+def test_get_investigation_history_returns_newest_first():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Investigation history test",
+            "description": "Testing investigation history retrieval.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    first_result = AIInvestigationResult(
+        recommended_checks=["Check database connectivity."]
+    )
+    second_result = AIInvestigationResult(
+        recommended_checks=["Inspect recent deployments."]
+    )
+
+    with TestSessionLocal() as db:
+        first = IncidentInvestigation(
+            incident_id=incident_id,
+            result=first_result.model_dump(mode="json"),
+        )
+        second = IncidentInvestigation(
+            incident_id=incident_id,
+            result=second_result.model_dump(mode="json"),
+        )
+
+        db.add_all([first, second])
+        db.commit()
+
+    response = client.get(
+        f"/incidents/{incident_id}/investigations"
+    )
+
+    assert response.status_code == 200
+
+    history = response.json()
+
+    assert len(history) == 2
+    assert history[0]["result"]["recommended_checks"] == [
+        "Inspect recent deployments."
+    ]
+    assert history[1]["result"]["recommended_checks"] == [
+        "Check database connectivity."
+    ]
+    assert history[0]["created_at"] is not None
+    assert history[1]["created_at"] is not None
+
+
+def test_get_investigation_history_returns_empty_list():
+    incident_response = client.post(
+        "/incidents",
+        json={
+            "title": "Empty investigation history",
+            "description": "This incident has no AI investigations.",
+            "service": "payment",
+            "severity": "medium",
+        },
+    )
+    assert incident_response.status_code == 201
+    incident_id = incident_response.json()["id"]
+
+    response = client.get(
+        f"/incidents/{incident_id}/investigations"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_investigation_history_for_missing_incident():
+    response = client.get(
+        "/incidents/999999/investigations"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Incident 999999 not found"

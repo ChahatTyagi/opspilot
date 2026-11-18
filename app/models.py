@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
-
+from app.ai_models import AIInvestigationResult
 
 class IncidentSeverity(str, Enum):
     LOW = "low"
@@ -127,3 +127,12 @@ class InvestigationReportResponse(BaseModel):
 
     # Missing information that limits the investigation
     evidence_gaps: list[str]
+
+
+class InvestigationHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    incident_id: int
+    result: AIInvestigationResult
+    created_at: datetime

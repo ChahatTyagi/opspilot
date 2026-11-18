@@ -1,3 +1,4 @@
+
 import logging
 import re
 import time
@@ -6,21 +7,25 @@ import uuid
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from openai import RateLimitError
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
 from app.ai_models import AIInvestigationResult
 from app.analyzer import analyze_evidence
 from app.config import get_allowed_origins
 from app.database import get_db
-from app.db_models import IncidentEvidence, IncidentRecord
+from app.db_models import (
+    IncidentEvidence,
+    IncidentInvestigation,
+    IncidentRecord,
+)
 from app.investigation_service import (
     UnsupportedLLMProviderError,
     run_ai_investigation,
 )
 from app.llm_client import LLMConfigurationError
-from app.ollama_client import OllamaRequestError
-from openai import RateLimitError
 from app.models import (
     EvidenceAnalysisResponse,
     EvidenceCounts,
@@ -34,16 +39,22 @@ from app.models import (
     IncidentStatus,
     IncidentUpdate,
     InvestigationContext,
+    InvestigationHistoryResponse,
     InvestigationReportResponse,
 )
+from app.ollama_client import OllamaRequestError
 from app.report_builder import build_investigation_report
 from app.retrieval_service import EvidenceRetriever
+
+
 logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="OpsPilot",
     description="Evidence-driven AI incident investigation",
     version="0.2.0",
 )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_allowed_origins(),
@@ -51,12 +62,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 app.state.evidence_retriever = EvidenceRetriever()
+
+
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     incoming_id = request.headers.get("X-Request-ID", "")
 
-    if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", incoming_id):
+    if re.fullmatch(r"[A-Za-z0-9\_-]{1,64}", incoming_id):
         request_id = incoming_id
     else:
         request_id = str(uuid.uuid4())
@@ -94,6 +108,7 @@ async def request_logging_middleware(request: Request, call_next):
 
     return response
 
+
 @app.exception_handler(Exception)
 async def global_exception_handler(
     request: Request,
@@ -118,7 +133,6 @@ async def global_exception_handler(
         response.headers["X-Request-ID"] = request_id
 
     return response
-
 
 
 @app.get("/health")
@@ -147,9 +161,15 @@ def readiness_check(db: Session = Depends(get_db)):
     }
 
 
-
-@app.post("/incidents", response_model=Incident, status_code=status.HTTP_201_CREATED)
-def create_incident(incident_data: IncidentCreate, db: Session = Depends(get_db)):
+@app.post(
+    "/incidents",
+    response_model=Incident,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_incident(
+    incident_data: IncidentCreate,
+    db: Session = Depends(get_db),
+):
     incident = IncidentRecord(
         title=incident_data.title,
         description=incident_data.description,
@@ -175,8 +195,6 @@ def create_incident(incident_data: IncidentCreate, db: Session = Depends(get_db)
         )
 
     return incident
-
-
 
 
 @app.get("/incidents", response_model=list[Incident])
@@ -219,7 +237,6 @@ def list_incidents(
     )
 
     return db.scalars(statement).all()
-
 
 
 @app.get("/incidents/{incident_id}", response_model=Incident)
@@ -269,6 +286,7 @@ def update_incident(
         )
 
     return incident
+
 
 @app.post(
     "/incidents/{incident_id}/evidence",
@@ -379,6 +397,7 @@ def get_investigation_context(
     evidence = list(db.scalars(statement).all())
 
     counts = EvidenceCounts()
+
     for item in evidence:
         setattr(
             counts,
@@ -392,6 +411,7 @@ def get_investigation_context(
         evidence_counts=counts,
         evidence=evidence,
     )
+
 
 @app.post(
     "/incidents/{incident_id}/investigate",
@@ -418,13 +438,26 @@ def investigate_incident(
         )
     )
     evidence = list(db.scalars(statement).all())
+
     try:
-        return run_ai_investigation(
+        result = run_ai_investigation(
             incident=incident,
             evidence=evidence,
         )
 
+        investigation = IncidentInvestigation(
+            incident_id=incident_id,
+            result=result.model_dump(mode="json"),
+        )
+
+        db.add(investigation)
+        db.commit()
+
+        return result
+
     except RateLimitError as exc:
+        db.rollback()
+
         error_body = exc.body
         error_details = (
             error_body.get("error", {})
@@ -450,28 +483,73 @@ def investigate_incident(
         ) from exc
 
     except LLMConfigurationError:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI investigation is not configured",
         )
 
     except OllamaRequestError as exc:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI investigation provider is unavailable",
         ) from exc
 
     except UnsupportedLLMProviderError as exc:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI investigation provider is not supported",
         ) from exc
 
     except ValueError:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="AI investigation returned invalid evidence references",
         )
+
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception(
+            "Unable to save AI investigation for incident %s",
+            incident_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to save AI investigation due to a database error",
+        ) from exc
+
+
+
+@app.get(
+    "/incidents/{incident_id}/investigations",
+    response_model=list[InvestigationHistoryResponse],
+)
+def get_investigation_history(
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident {incident_id} not found",
+        )
+
+    statement = (
+        select(IncidentInvestigation)
+        .where(IncidentInvestigation.incident_id == incident_id)
+        .order_by(
+            IncidentInvestigation.created_at.desc(),
+            IncidentInvestigation.id.desc(),
+        )
+    )
+
+    return list(db.scalars(statement).all())
+
 
 @app.get(
     "/incidents/{incident_id}/analyze",
@@ -502,6 +580,7 @@ def analyze_incident(
 
     return analyze_evidence(incident_id, evidence)
 
+
 @app.get(
     "/incidents/{incident_id}/report",
     response_model=InvestigationReportResponse,
@@ -512,6 +591,7 @@ def get_investigation_report(
     db: Session = Depends(get_db),
 ):
     incident = db.get(IncidentRecord, incident_id)
+
     if incident is None:
         raise HTTPException(
             status_code=404,
@@ -521,7 +601,10 @@ def get_investigation_report(
     statement = (
         select(IncidentEvidence)
         .where(IncidentEvidence.incident_id == incident_id)
-        .order_by(IncidentEvidence.created_at, IncidentEvidence.id)
+        .order_by(
+            IncidentEvidence.created_at,
+            IncidentEvidence.id,
+        )
     )
     evidence = list(db.scalars(statement).all())
 
