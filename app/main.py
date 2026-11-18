@@ -45,7 +45,7 @@ from app.models import (
 from app.ollama_client import OllamaRequestError
 from app.report_builder import build_investigation_report
 from app.retrieval_service import EvidenceRetriever
-
+from app.telemetry_routes import router as telemetry_router
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ app.add_middleware(
 )
 
 app.state.evidence_retriever = EvidenceRetriever()
+app.include_router(telemetry_router)
 
 
 @app.middleware("http")
