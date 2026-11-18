@@ -1,0 +1,1163 @@
+{
+  "benchmark": "OpsPilot Fact Grounding Evaluation v5",
+  "model": "qwen3:4b",
+  "dataset_version": "v3",
+  "evaluation_method": "Observed facts are evaluated using deterministic matching against manually labeled expected facts, required and forbidden regex checks, and evidence citation validation. Multiple generated statements may match the same expected fact. Grounded recall counts unique expected facts with at least one fully grounded generated statement, while grounded precision is calculated over generated statements. Repeated matches are reported separately. Information preservation is evaluated separately across observed_facts, reported_information, recommended_checks, and unknowns. Each expected information item is classified as preserved, partial, or missing. A preserved item must contain all expected match terms, all required regex details, and no forbidden pattern. A partial item contains at least one relevant match term but does not satisfy all complete-match requirements. Preservation recall counts only fully preserved information. Unmatched statements are not automatically classified as hallucinations. Both evaluators use deterministic lexical matching and are not semantic judges.",
+  "results": [
+    {
+      "case_id": "FG-01",
+      "title": "Payment failure rate increased",
+      "expected_fact_count": 1,
+      "generated_fact_count": 1,
+      "matched_expected_fact_count": 1,
+      "grounded_expected_fact_count": 1,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 1,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 1,
+        "preserved_information_count": 1,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "payment",
+              "failure"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "Payment failure rate increased from 2% to 8% between 10:00 and 10:15 UTC."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "Payment failure rate increased from 2% to 8% between 10:00 and 10:15 UTC.",
+          "evidence_ids": [
+            1001
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 113.537,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "The payment service is experiencing failures."
+        ],
+        "observed_facts": [
+          {
+            "statement": "Payment failure rate increased from 2% to 8% between 10:00 and 10:15 UTC.",
+            "evidence_ids": [
+              1001
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "Payment failure rate increase may be due to a temporary spike in traffic or a failure in the payment processing step.",
+            "supporting_evidence_ids": [
+              1001
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check payment processing logs for errors during the time window of 10:00-10:15 UTC to identify specific failure causes.",
+          "Compare payment processing metrics before and after 10:00 UTC to determine if there was a traffic spike."
+        ],
+        "unknowns": [
+          "Historical payment failure rates and traffic volumes are unavailable for comparison."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-02",
+      "title": "High API latency",
+      "expected_fact_count": 2,
+      "generated_fact_count": 2,
+      "matched_expected_fact_count": 2,
+      "grounded_expected_fact_count": 2,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 2,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 2,
+        "preserved_information_count": 2,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "latency",
+              "500"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "API gateway p95 latency reached 500 ms at 11:20 UTC."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          },
+          {
+            "expected_fact_index": 1,
+            "match_terms": [
+              "normal",
+              "latency",
+              "120"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "The normal p95 latency is 120 ms."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "API gateway p95 latency reached 500 ms at 11:20 UTC.",
+          "evidence_ids": [
+            1002
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        },
+        {
+          "statement": "The normal p95 latency is 120 ms.",
+          "evidence_ids": [
+            1002
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 1,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 44.92,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "The API is responding more slowly than usual."
+        ],
+        "observed_facts": [
+          {
+            "statement": "API gateway p95 latency reached 500 ms at 11:20 UTC.",
+            "evidence_ids": [
+              1002
+            ]
+          },
+          {
+            "statement": "The normal p95 latency is 120 ms.",
+            "evidence_ids": [
+              1002
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "The API gateway may be experiencing increased latency due to a bottleneck in the backend services.",
+            "supporting_evidence_ids": [
+              1002
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check backend service response times to identify if there's a bottleneck in the backend services.",
+          "Compare the API gateway latency metrics with the backend service latency metrics to determine the source of the latency spike."
+        ],
+        "unknowns": [
+          "The specific backend service causing the latency increase is unknown."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-03",
+      "title": "Database connection monitoring",
+      "expected_fact_count": 1,
+      "generated_fact_count": 1,
+      "matched_expected_fact_count": 1,
+      "grounded_expected_fact_count": 1,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 1,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 1,
+        "preserved_information_count": 1,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "database",
+              "connection"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "No database connection failures were recorded during the 15-minute monitoring window."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "No database connection failures were recorded during the 15-minute monitoring window.",
+          "evidence_ids": [
+            1003
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 25.283,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "The database connection monitor reported its status."
+        ],
+        "observed_facts": [
+          {
+            "statement": "No database connection failures were recorded during the 15-minute monitoring window.",
+            "evidence_ids": [
+              1003
+            ]
+          }
+        ],
+        "hypotheses": [],
+        "recommended_checks": [],
+        "unknowns": [
+          "The time window for monitoring is 15 minutes, but the exact duration of the monitoring period is not specified."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-04",
+      "title": "Worker restart recorded",
+      "expected_fact_count": 1,
+      "generated_fact_count": 1,
+      "matched_expected_fact_count": 1,
+      "grounded_expected_fact_count": 1,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 1,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 1,
+        "preserved_information_count": 1,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "worker",
+              "restarted"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "Worker process restarted at 10:42 UTC after receiving a termination signal."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "Worker process restarted at 10:42 UTC after receiving a termination signal.",
+          "evidence_ids": [
+            1004
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 34.123,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "A worker restart was reported."
+        ],
+        "observed_facts": [
+          {
+            "statement": "Worker process restarted at 10:42 UTC after receiving a termination signal.",
+            "evidence_ids": [
+              1004
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "The worker process was terminated due to a signal from the system.",
+            "supporting_evidence_ids": [
+              1004
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check the system logs for the source of the termination signal to identify if it was a controlled shutdown or an unexpected signal."
+        ],
+        "unknowns": [
+          "The reason for the termination signal is unknown."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-05",
+      "title": "Suggested service restart",
+      "expected_fact_count": 2,
+      "generated_fact_count": 1,
+      "matched_expected_fact_count": 0,
+      "grounded_expected_fact_count": 0,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 0,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 1,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 0.0,
+      "fact_match_recall": 0.0,
+      "grounded_fact_recall": 0.0,
+      "information_preservation": {
+        "expected_information_count": 2,
+        "preserved_information_count": 0,
+        "partially_preserved_information_count": 2,
+        "missing_information_count": 0,
+        "information_preservation_recall": 0.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "notification",
+              "restart"
+            ],
+            "status": "partial",
+            "preserved": false,
+            "partially_preserved": true,
+            "matched_fields": [
+              "recommended_checks",
+              "unknowns"
+            ],
+            "matched_text": [
+              "Check if the notification service is experiencing high error rates or latency before restarting.",
+              "Verify the current status of the notification service and its resource utilization to determine if restart is necessary.",
+              "The specific issue causing the notification service to need a restart is unknown."
+            ],
+            "complete_match_count": 0,
+            "partial_match_count": 3
+          },
+          {
+            "expected_fact_index": 1,
+            "match_terms": [
+              "restart",
+              "confirmed"
+            ],
+            "status": "partial",
+            "preserved": false,
+            "partially_preserved": true,
+            "matched_fields": [
+              "recommended_checks",
+              "unknowns"
+            ],
+            "matched_text": [
+              "Check if the notification service is experiencing high error rates or latency before restarting.",
+              "Verify the current status of the notification service and its resource utilization to determine if restart is necessary.",
+              "The specific issue causing the notification service to need a restart is unknown."
+            ],
+            "complete_match_count": 0,
+            "partial_match_count": 3
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "An investigation note contains a suggested action.",
+          "evidence_ids": [
+            1005
+          ],
+          "matched_expected_fact": false,
+          "classification": "unmatched_or_incomplete",
+          "grounded": false,
+          "numeric_and_detail_checks_passed": false,
+          "citation_checks_passed": false,
+          "invalid_evidence_ids": [],
+          "failed_checks": [
+            "No independently labeled expected fact matched this statement. Its factual correctness cannot be determined by this evaluator."
+          ],
+          "matched_expected_fact_index": null,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 35.839,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "An investigation note contains a suggested action."
+        ],
+        "observed_facts": [
+          {
+            "statement": "An investigation note contains a suggested action.",
+            "evidence_ids": [
+              1005
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "The suggested action might be a temporary measure to resolve the notification service issue.",
+            "supporting_evidence_ids": [
+              1005
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check if the notification service is experiencing high error rates or latency before restarting.",
+          "Verify the current status of the notification service and its resource utilization to determine if restart is necessary."
+        ],
+        "unknowns": [
+          "The specific issue causing the notification service to need a restart is unknown."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-06",
+      "title": "Deployment followed by errors",
+      "expected_fact_count": 2,
+      "generated_fact_count": 2,
+      "matched_expected_fact_count": 2,
+      "grounded_expected_fact_count": 2,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 2,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 2,
+        "preserved_information_count": 2,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "deployment"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "Version 2.4.1 deployment completed at 10:00 UTC."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          },
+          {
+            "expected_fact_index": 1,
+            "match_terms": [
+              "order",
+              "errors"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "Order processing errors first appeared at 10:03 UTC."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "Version 2.4.1 deployment completed at 10:00 UTC.",
+          "evidence_ids": [
+            1006
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        },
+        {
+          "statement": "Order processing errors first appeared at 10:03 UTC.",
+          "evidence_ids": [
+            1007
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 1,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 43.017,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "Errors were reported shortly after deployment."
+        ],
+        "observed_facts": [
+          {
+            "statement": "Version 2.4.1 deployment completed at 10:00 UTC.",
+            "evidence_ids": [
+              1006
+            ]
+          },
+          {
+            "statement": "Order processing errors first appeared at 10:03 UTC.",
+            "evidence_ids": [
+              1007
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "The deployment may have introduced a bug that caused order processing errors.",
+            "supporting_evidence_ids": [
+              1006,
+              1007
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check application logs for error patterns around 10:03 UTC to identify specific error types and their frequency."
+        ],
+        "unknowns": [
+          "The specific error types and their rates during the deployment window are unavailable."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-07",
+      "title": "Queue retries and depth",
+      "expected_fact_count": 2,
+      "generated_fact_count": 2,
+      "matched_expected_fact_count": 2,
+      "grounded_expected_fact_count": 2,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 2,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 2,
+        "preserved_information_count": 2,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "queue",
+              "depth"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts",
+              "unknowns"
+            ],
+            "matched_text": [
+              "Queue depth reached 1200 messages.",
+              "The time period during which the queue depth reached 1200 messages is unknown."
+            ],
+            "complete_match_count": 2,
+            "partial_match_count": 0
+          },
+          {
+            "expected_fact_index": 1,
+            "match_terms": [
+              "retry"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "The consumer recorded 3 retry attempts for the affected message."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "Queue depth reached 1200 messages.",
+          "evidence_ids": [
+            1008
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        },
+        {
+          "statement": "The consumer recorded 3 retry attempts for the affected message.",
+          "evidence_ids": [
+            1008
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 1,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 50.208,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "The message queue experienced increased activity."
+        ],
+        "observed_facts": [
+          {
+            "statement": "Queue depth reached 1200 messages.",
+            "evidence_ids": [
+              1008
+            ]
+          },
+          {
+            "statement": "The consumer recorded 3 retry attempts for the affected message.",
+            "evidence_ids": [
+              1008
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "The queue depth may be increasing due to a high rate of message production exceeding the consumer's processing capacity.",
+            "supporting_evidence_ids": [
+              1008
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check the message production rate and consumer processing rate over the past 5 minutes to identify if there is a temporary spike in message volume.",
+          "Inspect the retry attempts for the affected message to determine if the retries are causing backlogs or if the messages are being processed successfully after retries."
+        ],
+        "unknowns": [
+          "The time period during which the queue depth reached 1200 messages is unknown."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-08",
+      "title": "Timeout with suspected cache involvement",
+      "expected_fact_count": 1,
+      "generated_fact_count": 1,
+      "matched_expected_fact_count": 1,
+      "grounded_expected_fact_count": 1,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 1,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 1,
+        "preserved_information_count": 1,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "timeout"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "A request timeout occurred at 14:05 UTC."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "A request timeout occurred at 14:05 UTC.",
+          "evidence_ids": [
+            1009
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 35.067,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "An intermittent timeout was reported."
+        ],
+        "observed_facts": [
+          {
+            "statement": "A request timeout occurred at 14:05 UTC.",
+            "evidence_ids": [
+              1009
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "The cache may be involved in the timeout.",
+            "supporting_evidence_ids": [
+              1009
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check the cache hit rate and cache miss rate for the catalog service during the timeout period to identify if cache usage was elevated."
+        ],
+        "unknowns": [
+          "The specific cache component or cache layer involved is unknown."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-09",
+      "title": "HTTP 503 responses",
+      "expected_fact_count": 1,
+      "generated_fact_count": 1,
+      "matched_expected_fact_count": 1,
+      "grounded_expected_fact_count": 1,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 1,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 1,
+        "preserved_information_count": 1,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "503"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "The API returned 17 HTTP 503 responses during the five-minute interval from 15:00 to 15:05 UTC."
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "The API returned 17 HTTP 503 responses during the five-minute interval from 15:00 to 15:05 UTC.",
+          "evidence_ids": [
+            1010
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 40.5,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "The API returned service unavailable responses."
+        ],
+        "observed_facts": [
+          {
+            "statement": "The API returned 17 HTTP 503 responses during the five-minute interval from 15:00 to 15:05 UTC.",
+            "evidence_ids": [
+              1010
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "The API service is unavailable due to a temporary service outage.",
+            "supporting_evidence_ids": [
+              1010
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check the availability of the API service by pinging the endpoint to verify if it's responsive.",
+          "Inspect the backend service logs for errors or failures that might be causing the 503 responses."
+        ],
+        "unknowns": [
+          "The cause of the 503 responses is unknown."
+        ]
+      }
+    },
+    {
+      "case_id": "FG-10",
+      "title": "Disk utilization threshold",
+      "expected_fact_count": 2,
+      "generated_fact_count": 2,
+      "matched_expected_fact_count": 2,
+      "grounded_expected_fact_count": 2,
+      "repeated_match_count": 0,
+      "grounded_fact_count": 2,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "information_preservation": {
+        "expected_information_count": 2,
+        "preserved_information_count": 2,
+        "partially_preserved_information_count": 0,
+        "missing_information_count": 0,
+        "information_preservation_recall": 1.0,
+        "information_items": [
+          {
+            "expected_fact_index": 0,
+            "match_terms": [
+              "disk",
+              "utilization"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "Disk utilization reached 92%"
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          },
+          {
+            "expected_fact_index": 1,
+            "match_terms": [
+              "warning",
+              "threshold"
+            ],
+            "status": "preserved",
+            "preserved": true,
+            "partially_preserved": false,
+            "matched_fields": [
+              "observed_facts"
+            ],
+            "matched_text": [
+              "The configured warning threshold is 90%"
+            ],
+            "complete_match_count": 1,
+            "partial_match_count": 0
+          }
+        ]
+      },
+      "facts": [
+        {
+          "statement": "Disk utilization reached 92%",
+          "evidence_ids": [
+            1011
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 0,
+          "is_repeated_match": false
+        },
+        {
+          "statement": "The configured warning threshold is 90%",
+          "evidence_ids": [
+            1011
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": [],
+          "matched_expected_fact_index": 1,
+          "is_repeated_match": false
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 39.616,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "Disk utilization crossed its warning threshold."
+        ],
+        "observed_facts": [
+          {
+            "statement": "Disk utilization reached 92%",
+            "evidence_ids": [
+              1011
+            ]
+          },
+          {
+            "statement": "The configured warning threshold is 90%",
+            "evidence_ids": [
+              1011
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "Disk utilization reached 92% due to increased data ingestion rates.",
+            "supporting_evidence_ids": [
+              1011
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check historical disk utilization trends to identify patterns or anomalies.",
+          "Verify the rate of data ingestion to determine if it has increased recently."
+        ],
+        "unknowns": [
+          "Historical disk utilization data is unavailable for the past 24 hours."
+        ]
+      }
+    }
+  ],
+  "metrics": {
+    "total_cases": 10,
+    "successful_cases": 10,
+    "failed_cases": 0,
+    "expected_facts": 15,
+    "generated_facts": 14,
+    "matched_expected_facts": 13,
+    "grounded_expected_facts": 13,
+    "repeated_matches": 0,
+    "grounded_facts": 13,
+    "incomplete_facts": 0,
+    "citation_error_facts": 0,
+    "contradicted_facts": 0,
+    "unmatched_facts": 1,
+    "detail_check_failures": 0,
+    "citation_check_failures": 0,
+    "invalid_citations": 0,
+    "grounded_fact_precision": 0.9286,
+    "fact_match_recall": 0.8667,
+    "grounded_fact_recall": 0.8667,
+    "expected_information": 15,
+    "preserved_information": 13,
+    "partially_preserved_information": 2,
+    "missing_information": 0,
+    "information_preservation_recall": 0.8667,
+    "mean_latency_seconds": 46.211
+  }
+}

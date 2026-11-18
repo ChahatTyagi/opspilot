@@ -1,10 +1,12 @@
-
 import json
 
 from pydantic import ValidationError
 
 from app.ai_models import AIInvestigationResult
-from app.investigation_prompts import INVESTIGATION_INSTRUCTIONS
+from app.investigation_prompts import (
+    INVESTIGATION_INSTRUCTIONS,
+    TOOL_SELECTION_INSTRUCTIONS,
+)
 from app.ollama_client import OllamaClient
 from app.refinement_prompts import (
     RECOMMENDATION_REFINEMENT_INSTRUCTIONS,
@@ -106,8 +108,6 @@ def refine_ollama_investigation_recommendations(
     return _parse_investigation_response(response)
 
 
-
-
 def generate_ollama_investigation_with_tools(
     *,
     incident_context: str,
@@ -119,10 +119,12 @@ def generate_ollama_investigation_with_tools(
     if client is None:
         client = OllamaClient()
 
+    # Phase 1 uses a compact prompt so the model can focus on
+    # deciding whether additional evidence should be retrieved.
     messages = [
         {
             "role": "system",
-            "content": INVESTIGATION_INSTRUCTIONS,
+            "content": TOOL_SELECTION_INSTRUCTIONS,
         },
         {
             "role": "user",
@@ -132,11 +134,36 @@ def generate_ollama_investigation_with_tools(
 
     tool_call_count = 0
 
+    def generate_final_result() -> AIInvestigationResult:
+        """
+        Generate the final investigation using the full instructions.
+
+        Preserve the incident context and the complete tool conversation,
+        but replace the short tool-selection system prompt with the
+        comprehensive investigation instructions.
+        """
+
+        final_messages = list(messages)
+
+        final_messages[0] = {
+            "role": "system",
+            "content": INVESTIGATION_INSTRUCTIONS,
+        }
+
+        final_response = client.chat(
+            messages=final_messages,
+            format=AIInvestigationResult.model_json_schema(),
+        )
+
+        return _parse_investigation_response(final_response)
+
     while True:
+        # Phase 1: Ask the model whether additional evidence is needed.
+        # Do not pass a JSON schema here because structured-output mode
+        # previously interfered with tool selection in this setup.
         response = client.chat(
             messages=list(messages),
             tools=OLLAMA_TOOLS,
-            format=AIInvestigationResult.model_json_schema(),
         )
 
         message = response.get("message")
@@ -151,8 +178,10 @@ def generate_ollama_investigation_with_tools(
         if not isinstance(tool_calls, list):
             raise ValueError("Ollama returned malformed tool calls")
 
+        # No additional search requested. Generate the final
+        # structured investigation using the complete instructions.
         if not tool_calls:
-            return _parse_investigation_response(response)
+            return generate_final_result()
 
         messages.append(message)
         stop_searching = False
@@ -177,34 +206,44 @@ def generate_ollama_investigation_with_tools(
                 raise ValueError("Malformed Ollama tool call")
 
             if stop_searching:
-                messages.append({
-                    "role": "tool",
-                    "tool_name": tool_name,
-                    "content": json.dumps({
-                        "ok": False,
-                        "error": (
-                            "Search stopped because the previous search "
-                            "returned no new evidence. No further searches "
-                            "are permitted. Produce the final investigation "
-                            "using the evidence already available."
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_name": tool_name,
+                        "content": json.dumps(
+                            {
+                                "ok": False,
+                                "error": (
+                                    "Search stopped because the previous "
+                                    "search returned no new evidence. "
+                                    "No further searches are permitted. "
+                                    "Produce the final investigation using "
+                                    "the evidence already available."
+                                ),
+                            }
                         ),
-                    }),
-                })
+                    }
+                )
                 continue
 
             if tool_call_count >= executor.max_calls:
-                messages.append({
-                    "role": "tool",
-                    "tool_name": tool_name,
-                    "content": json.dumps({
-                        "ok": False,
-                        "error": (
-                            "Tool-call limit reached. No further searches "
-                            "are permitted. Produce the final investigation "
-                            "using the evidence already available."
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_name": tool_name,
+                        "content": json.dumps(
+                            {
+                                "ok": False,
+                                "error": (
+                                    "Tool-call limit reached. No further "
+                                    "searches are permitted. Produce the "
+                                    "final investigation using the evidence "
+                                    "already available."
+                                ),
+                            }
                         ),
-                    }),
-                })
+                    }
+                )
                 continue
 
             tool_call_count += 1
@@ -214,11 +253,13 @@ def generate_ollama_investigation_with_tools(
                 arguments=arguments,
             )
 
-            messages.append({
-                "role": "tool",
-                "tool_name": tool_name,
-                "content": json.dumps(result),
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_name": tool_name,
+                    "content": json.dumps(result),
+                }
+            )
 
             returned_results = result.get("results", [])
             new_evidence_ids = result.get("new_evidence_ids", [])
@@ -226,10 +267,8 @@ def generate_ollama_investigation_with_tools(
             if returned_results and not new_evidence_ids:
                 stop_searching = True
 
+        # Preserve the existing stopping rules.
+        # Once searching stops or the call limit is reached,
+        # generate the final structured investigation.
         if stop_searching or tool_call_count >= executor.max_calls:
-            final_response = client.chat(
-                messages=list(messages),
-                format=AIInvestigationResult.model_json_schema(),
-            )
-
-            return _parse_investigation_response(final_response)
+            return generate_final_result()

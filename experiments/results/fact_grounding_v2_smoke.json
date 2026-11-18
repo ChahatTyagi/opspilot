@@ -1,0 +1,93 @@
+{
+  "benchmark": "OpsPilot Fact Grounding Evaluation v2",
+  "model": "qwen3:4b",
+  "dataset_version": "v2",
+  "evaluation_method": "Deterministic matching against manually labeled expected facts, required and forbidden regex checks, and evidence citation validation. Unmatched statements are not automatically classified as hallucinations. This evaluator is not a semantic judge.",
+  "results": [
+    {
+      "case_id": "FG-01",
+      "title": "Payment failure rate increased",
+      "expected_fact_count": 1,
+      "generated_fact_count": 1,
+      "matched_expected_fact_count": 1,
+      "grounded_fact_count": 1,
+      "incomplete_fact_count": 0,
+      "citation_error_fact_count": 0,
+      "contradicted_fact_count": 0,
+      "unmatched_fact_count": 0,
+      "detail_check_failure_count": 0,
+      "citation_check_failure_count": 0,
+      "invalid_citation_count": 0,
+      "grounded_fact_precision": 1.0,
+      "fact_match_recall": 1.0,
+      "grounded_fact_recall": 1.0,
+      "facts": [
+        {
+          "statement": "Payment failure rate increased from 2% to 8% between 10:00 and 10:15 UTC.",
+          "evidence_ids": [
+            1001
+          ],
+          "matched_expected_fact": true,
+          "classification": "grounded",
+          "grounded": true,
+          "numeric_and_detail_checks_passed": true,
+          "citation_checks_passed": true,
+          "invalid_evidence_ids": [],
+          "failed_checks": []
+        }
+      ],
+      "status": "success",
+      "latency_seconds": 107.569,
+      "tool_calls": 0,
+      "investigation": {
+        "reported_information": [
+          "Payment failure rate increased from 2% to 8% between 10:00 and 10:15 UTC."
+        ],
+        "observed_facts": [
+          {
+            "statement": "Payment failure rate increased from 2% to 8% between 10:00 and 10:15 UTC.",
+            "evidence_ids": [
+              1001
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "explanation": "Payment failure rate increased due to database connection pool saturation.",
+            "supporting_evidence_ids": [
+              1001
+            ],
+            "confidence": "low"
+          }
+        ],
+        "recommended_checks": [
+          "Check connection pool utilization over time to determine if pool saturation occurred.",
+          "Inspect connection acquisition and release rates to identify leaks or delays."
+        ],
+        "unknowns": [
+          "Historical connection pool utilization data is unavailable."
+        ]
+      }
+    }
+  ],
+  "metrics": {
+    "total_cases": 1,
+    "successful_cases": 1,
+    "failed_cases": 0,
+    "expected_facts": 1,
+    "generated_facts": 1,
+    "matched_expected_facts": 1,
+    "grounded_facts": 1,
+    "incomplete_facts": 0,
+    "citation_error_facts": 0,
+    "contradicted_facts": 0,
+    "unmatched_facts": 0,
+    "detail_check_failures": 0,
+    "citation_check_failures": 0,
+    "invalid_citations": 0,
+    "grounded_fact_precision": 1.0,
+    "fact_match_recall": 1.0,
+    "grounded_fact_recall": 1.0,
+    "mean_latency_seconds": 107.569
+  }
+}
