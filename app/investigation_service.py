@@ -62,6 +62,7 @@ def run_ai_investigation(
     incident: Any,
     evidence: Sequence[Any],
     client: OpenAI | OllamaClient | None = None,
+    evidence_retriever: Any | None = None,
 ) -> AIInvestigationResult:
     """Run an evidence-grounded investigation using the configured LLM."""
 
@@ -85,6 +86,7 @@ def run_ai_investigation(
     executor = InvestigationToolExecutor(
         incident_id=incident.id,
         evidence_items=evidence,
+        evidence_retriever=evidence_retriever,
     )
 
     provider = get_llm_provider()

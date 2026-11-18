@@ -222,3 +222,211 @@ def test_executor_rejects_whitespace_only_search_query(executor):
     assert result["ok"] is False
     assert "empty" in result["error"].lower()
     assert executor.call_count == 0
+
+
+
+class FakeEvidenceRetriever:
+    """Return controlled retrieval results without loading an embedding model."""
+
+    def __init__(self, results_by_query):
+        self.results_by_query = results_by_query
+        self.calls = []
+
+    def retrieve(self, *, query, evidence_items, top_k):
+        self.calls.append(
+            {
+                "query": query,
+                "evidence_items": list(evidence_items),
+                "top_k": top_k,
+            }
+        )
+        return self.results_by_query.get(query, [])
+
+
+def make_retrieval_result(
+    evidence_id=10,
+    incident_id=42,
+    source_type="log",
+    chunk_index=0,
+    text="Database connection pool exhausted.",
+    score=0.92,
+):
+    chunk = SimpleNamespace(
+        incident_id=incident_id,
+        evidence_id=evidence_id,
+        source_type=source_type,
+        chunk_index=chunk_index,
+        text=text,
+    )
+
+    return SimpleNamespace(
+        chunk=chunk,
+        score=score,
+    )
+
+
+def test_executor_uses_semantic_retriever_and_returns_chunk_metadata():
+    retrieval_result = make_retrieval_result(
+        evidence_id=10,
+        chunk_index=2,
+        score=0.92,
+    )
+
+    retriever = FakeEvidenceRetriever(
+        {"connection pool": [retrieval_result]}
+    )
+
+    executor = InvestigationToolExecutor(
+        incident_id=42,
+        evidence_items=[make_evidence()],
+        evidence_retriever=retriever,
+    )
+
+    result = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "connection pool"},
+    )
+
+    assert result["ok"] is True
+    assert retriever.calls[0]["query"] == "connection pool"
+    assert retriever.calls[0]["top_k"] == 5
+
+    assert result["results"] == [
+        {
+            "incident_id": 42,
+            "evidence_id": 10,
+            "source_type": "log",
+            "chunk_index": 2,
+            "text": "Database connection pool exhausted.",
+            "score": 0.92,
+        }
+    ]
+
+    assert result["new_evidence_ids"] == [10]
+
+
+def test_executor_scopes_semantic_retrieval_to_current_incident():
+    current_evidence = make_evidence(
+        evidence_id=10,
+        incident_id=42,
+    )
+    foreign_evidence = make_evidence(
+        evidence_id=99,
+        incident_id=99,
+    )
+
+    retriever = FakeEvidenceRetriever(
+        {
+            "database": [
+                make_retrieval_result(
+                    evidence_id=10,
+                    incident_id=42,
+                ),
+                make_retrieval_result(
+                    evidence_id=99,
+                    incident_id=99,
+                ),
+            ]
+        }
+    )
+
+    executor = InvestigationToolExecutor(
+        incident_id=42,
+        evidence_items=[current_evidence, foreign_evidence],
+        evidence_retriever=retriever,
+    )
+
+    result = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "database"},
+    )
+
+    passed_evidence = retriever.calls[0]["evidence_items"]
+
+    assert passed_evidence == [current_evidence]
+    assert all(item.incident_id == 42 for item in passed_evidence)
+
+    assert result["ok"] is True
+    assert len(result["results"]) == 1
+    assert result["results"][0]["evidence_id"] == 10
+    assert result["new_evidence_ids"] == [10]
+
+    assert 99 not in executor.returned_evidence_ids
+
+
+def test_executor_tracks_new_evidence_across_semantic_searches():
+    retriever = FakeEvidenceRetriever(
+        {
+            "database": [
+                make_retrieval_result(evidence_id=10),
+            ],
+            "payment": [
+                make_retrieval_result(
+                    evidence_id=10,
+                    chunk_index=1,
+                ),
+                make_retrieval_result(
+                    evidence_id=11,
+                    chunk_index=0,
+                    text="Payment gateway returned HTTP 503.",
+                ),
+            ],
+        }
+    )
+
+    executor = InvestigationToolExecutor(
+        incident_id=42,
+        evidence_items=[
+            make_evidence(evidence_id=10),
+            make_evidence(evidence_id=11),
+        ],
+        evidence_retriever=retriever,
+        max_calls=3,
+    )
+
+    first = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "database"},
+    )
+
+    second = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "payment"},
+    )
+
+    assert first["ok"] is True
+    assert second["ok"] is True
+
+    assert first["new_evidence_ids"] == [10]
+    assert second["new_evidence_ids"] == [11]
+
+    assert executor.returned_evidence_ids == {10, 11}
+
+
+def test_executor_rejects_semantic_results_from_another_incident():
+    retriever = FakeEvidenceRetriever(
+        {
+            "database": [
+                make_retrieval_result(
+                    evidence_id=99,
+                    incident_id=99,
+                )
+            ]
+        }
+    )
+
+    executor = InvestigationToolExecutor(
+        incident_id=42,
+        evidence_items=[make_evidence()],
+        evidence_retriever=retriever,
+    )
+
+    result = executor.execute(
+        tool_name="search_incident_evidence",
+        arguments={"query": "database"},
+    )
+
+    assert result["ok"] is True
+    assert result["results"] == []
+    assert result["new_evidence_ids"] == []
+    assert executor.returned_evidence_ids == set()

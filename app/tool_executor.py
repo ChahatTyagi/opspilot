@@ -1,4 +1,4 @@
-
+﻿
 import json
 from typing import Any, Sequence
 
@@ -9,6 +9,8 @@ MAX_TOOL_CALLS = 5
 MAX_ARGUMENTS_LENGTH = 1000
 MAX_ERROR_LENGTH = 200
 MAX_SEARCH_QUERY_LENGTH = 120
+MAX_SEMANTIC_RESULTS = 5
+MAX_TEXT_LENGTH = 1000
 
 
 class InvestigationToolExecutor:
@@ -20,6 +22,7 @@ class InvestigationToolExecutor:
         incident_id: int,
         evidence_items: Sequence[Any],
         max_calls: int = MAX_TOOL_CALLS,
+        evidence_retriever: Any | None = None,
     ):
         if not isinstance(max_calls, int) or isinstance(max_calls, bool):
             raise ValueError("max_calls must be an integer.")
@@ -31,6 +34,8 @@ class InvestigationToolExecutor:
 
         self.incident_id = incident_id
         self.evidence_items = evidence_items
+        self.evidence_retriever = evidence_retriever
+
         self.max_calls = max_calls
         self.call_count = 0
         self.seen_calls = set()
@@ -109,6 +114,7 @@ class InvestigationToolExecutor:
                         "Use a short, focused keyword or phrase."
                     ),
                 }
+
         call_signature = (tool_name, serialized_arguments)
 
         if call_signature in self.seen_calls:
@@ -148,12 +154,39 @@ class InvestigationToolExecutor:
     def _search_incident_evidence(self, arguments: dict) -> dict:
         """Search evidence for this incident and track returned evidence IDs."""
 
+        if self.evidence_retriever is None:
+            # Backwards-compatible lexical search.
+            results = search_incident_evidence(
+                query=arguments["query"],
+                incident_id=self.incident_id,
+                evidence_items=self.evidence_items,
+            )
+        else:
+            # Enforce incident isolation before semantic retrieval.
+            scoped_evidence = [
+                item
+                for item in self.evidence_items
+                if getattr(item, "incident_id", None) == self.incident_id
+            ]
 
-        results = search_incident_evidence(
-            query=arguments["query"],
-            incident_id=self.incident_id,
-            evidence_items=self.evidence_items,
-        )
+            retrieval_results = self.evidence_retriever.retrieve(
+                query=arguments["query"],
+                evidence_items=scoped_evidence,
+                top_k=MAX_SEMANTIC_RESULTS,
+            )
+
+            results = [
+                {
+                    "incident_id": result.chunk.incident_id,
+                    "evidence_id": result.chunk.evidence_id,
+                    "source_type": result.chunk.source_type,
+                    "chunk_index": result.chunk.chunk_index,
+                    "text": result.chunk.text[:MAX_TEXT_LENGTH],
+                    "score": result.score,
+                }
+                for result in retrieval_results
+                if result.chunk.incident_id == self.incident_id
+            ]
 
         current_evidence_ids = {
             item["evidence_id"]

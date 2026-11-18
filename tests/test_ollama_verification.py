@@ -19,7 +19,6 @@ from app.ollama_verification import (
 )
 
 
-
 def make_hypothesis():
     return AIHypothesis(
         explanation="Connection saturation may have caused database errors.",
@@ -262,10 +261,10 @@ def test_calls_verifier_with_structured_output():
     )
 
     assessment_schema = call["format"]["$defs"][
-    "AIHypothesisAssessment"
+        "AIHypothesisAssessment"
     ]
-    assert "evidence_ids" in assessment_schema["required"]
 
+    assert "evidence_ids" in assessment_schema["required"]
 
 
 def test_verifies_multiple_hypotheses_in_separate_requests():
@@ -432,7 +431,9 @@ def test_retries_supported_assessment_when_structured_evidence_ids_are_empty():
             )
         ]
     )
+
     valid_retry = make_verification(evidence_id=11)
+
     client = FakeOllamaClient(
         responses=[
             make_response(invalid_first),
@@ -449,9 +450,11 @@ def test_retries_supported_assessment_when_structured_evidence_ids_are_empty():
     assert len(client.calls) == 2
     assert result.assessments[0].verdict == AIHypothesisVerdict.SUPPORTED
     assert result.assessments[0].evidence_ids == [11]
+
     assert "CORRECTIVE RETRY REQUIREMENTS" in (
         client.calls[1]["messages"][0]["content"]
     )
+
     assert client.calls[0]["messages"][1]["content"] == (
         client.calls[1]["messages"][1]["content"]
     )
@@ -468,6 +471,7 @@ def test_retries_when_rationale_uses_underscore_id_missing_from_structured_ids()
             )
         ]
     )
+
     valid_retry = AIHypothesisVerificationResult(
         assessments=[
             AIHypothesisAssessment(
@@ -478,8 +482,12 @@ def test_retries_when_rationale_uses_underscore_id_missing_from_structured_ids()
             )
         ]
     )
+
     client = FakeOllamaClient(
-        responses=[make_response(invalid_first), make_response(valid_retry)]
+        responses=[
+            make_response(invalid_first),
+            make_response(valid_retry),
+        ]
     )
 
     result = verify_ollama_hypotheses(
@@ -503,6 +511,7 @@ def test_raises_after_one_corrective_retry_also_fails_validation():
             )
         ]
     )
+
     invalid_retry = AIHypothesisVerificationResult(
         assessments=[
             AIHypothesisAssessment(
@@ -513,8 +522,12 @@ def test_raises_after_one_corrective_retry_also_fails_validation():
             )
         ]
     )
+
     client = FakeOllamaClient(
-        responses=[make_response(invalid_first), make_response(invalid_retry)]
+        responses=[
+            make_response(invalid_first),
+            make_response(invalid_retry),
+        ]
     )
 
     with pytest.raises(
@@ -541,14 +554,22 @@ def test_retries_when_verifier_cites_evidence_not_in_original_hypothesis():
             )
         ]
     )
+
     valid_retry = make_verification(evidence_id=11)
+
     client = FakeOllamaClient(
-        responses=[make_response(invalid_first), make_response(valid_retry)]
+        responses=[
+            make_response(invalid_first),
+            make_response(valid_retry),
+        ]
     )
 
     result = verify_ollama_hypotheses(
         hypotheses=[make_hypothesis()],
-        evidence=[make_evidence(), make_evidence(evidence_id=12)],
+        evidence=[
+            make_evidence(),
+            make_evidence(evidence_id=12),
+        ],
         client=client,
     )
 

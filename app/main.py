@@ -419,6 +419,7 @@ def get_investigation_context(
 )
 def investigate_incident(
     incident_id: int,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     incident = db.get(IncidentRecord, incident_id)
@@ -443,6 +444,7 @@ def investigate_incident(
         result = run_ai_investigation(
             incident=incident,
             evidence=evidence,
+            evidence_retriever=request.app.state.evidence_retriever,
         )
 
         investigation = IncidentInvestigation(

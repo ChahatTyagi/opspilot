@@ -1063,6 +1063,7 @@ def test_get_investigation_report_for_missing_incident():
     assert response.status_code == 404
 
 
+
 def test_run_ai_investigation_endpoint(monkeypatch):
     from app.ai_models import (
         AIFact,
@@ -1106,7 +1107,12 @@ def test_run_ai_investigation_endpoint(monkeypatch):
 
     captured = {}
 
-    def fake_investigation(*, incident, evidence):
+    def fake_investigation(
+        *,
+        incident,
+        evidence,
+        evidence_retriever,
+    ):
         captured["incident_id"] = incident.id
         captured["evidence_ids"] = [
             item.id for item in evidence
@@ -1114,6 +1120,7 @@ def test_run_ai_investigation_endpoint(monkeypatch):
         captured["evidence_contents"] = [
             item.content for item in evidence
         ]
+        captured["evidence_retriever"] = evidence_retriever
 
         return expected_result
 
@@ -1127,9 +1134,7 @@ def test_run_ai_investigation_endpoint(monkeypatch):
     )
 
     assert response.status_code == 200
-
     data = response.json()
-
     assert data["observed_facts"][0]["evidence_ids"] == [
         evidence_id
     ]
@@ -1142,6 +1147,11 @@ def test_run_ai_investigation_endpoint(monkeypatch):
     assert captured["evidence_contents"] == [
         "ERROR database connection failed"
     ]
+    assert (
+        captured["evidence_retriever"]
+        is app.state.evidence_retriever
+    )
+
 
 
 def test_run_ai_investigation_endpoint_missing_incident():
