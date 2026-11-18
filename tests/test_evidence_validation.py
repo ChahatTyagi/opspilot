@@ -599,3 +599,72 @@ def test_does_not_treat_ordinary_underscore_words_or_numbers_as_evidence_ids():
     validated = validate_assessment(assessment)
 
     assert len(validated.hypotheses) == 1
+
+
+def test_rejects_negative_hypothesis_index():
+    with pytest.raises(ValueError):
+        make_assessment(index=-1)
+
+
+def test_maps_assessments_by_index_not_response_order():
+    result = make_result()
+
+    result.hypotheses.append(
+        AIHypothesis(
+            explanation="The database may be experiencing high latency.",
+            supporting_evidence_ids=[10],
+            confidence=AIConfidence.MEDIUM,
+        )
+    )
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(
+                index=1,
+                verdict=AIHypothesisVerdict.INSUFFICIENT,
+                evidence_ids=[10],
+            ),
+            make_assessment(
+                index=0,
+                verdict=AIHypothesisVerdict.SUPPORTED,
+                evidence_ids=[11],
+            ),
+        ]
+    )
+
+    validated = validate_hypothesis_verification(
+        result=result,
+        verification=verification,
+        valid_evidence_ids={10, 11, 12},
+    )
+
+    assert len(validated.hypotheses) == 1
+    assert validated.hypotheses[0].explanation == (
+        result.hypotheses[0].explanation
+    )
+
+
+def test_rejects_duplicate_indexes_with_matching_assessment_count():
+    result = make_result()
+
+    result.hypotheses.append(
+        AIHypothesis(
+            explanation="The database may be experiencing high latency.",
+            supporting_evidence_ids=[10],
+            confidence=AIConfidence.MEDIUM,
+        )
+    )
+
+    verification = AIHypothesisVerificationResult(
+        assessments=[
+            make_assessment(index=0),
+            make_assessment(index=0),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="duplicate hypothesis assessment"):
+        validate_hypothesis_verification(
+            result=result,
+            verification=verification,
+            valid_evidence_ids={10, 11, 12},
+        )
