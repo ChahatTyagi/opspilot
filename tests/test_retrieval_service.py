@@ -1,4 +1,5 @@
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from app.retrieval_service import EvidenceRetriever
 from app.embeddings import LocalEmbedder
 from app.ollama_embeddings import OllamaEmbedder
+
 
 class FakeEmbedder:
     def embed_texts(self, texts):
@@ -22,12 +24,45 @@ class FakeEmbedder:
         return vectors
 
 
+class ConstantFakeEmbedder:
+    """Return identical vectors to isolate topology ranking behaviour."""
+
+    def embed_texts(self, texts):
+        return [[1.0, 0.0] for _ in texts]
+
+
 def make_evidence(evidence_id, content, source_type="log"):
     return SimpleNamespace(
         id=evidence_id,
         incident_id=42,
         source_type=source_type,
         content=content,
+    )
+
+
+def make_trace(
+    evidence_id,
+    service_name,
+    span_id,
+    trace_id="1" * 32,
+    parent_span_id=None,
+):
+    record = {
+        "schema_version": 1,
+        "signal": "trace",
+        "trace_id": trace_id,
+        "span_id": span_id,
+        "parent_span_id": parent_span_id,
+        "service_name": service_name,
+        "span_name": "request",
+        "status_code": 0,
+        "duration_ms": 5.0,
+    }
+
+    return make_evidence(
+        evidence_id,
+        json.dumps(record),
+        source_type="trace",
     )
 
 
@@ -133,15 +168,16 @@ def test_retrieve_rejects_invalid_cache_size():
     with pytest.raises(ValueError, match="cache_size must be positive"):
         EvidenceRetriever(embedder=FakeEmbedder(), cache_size=0)
 
+
 @pytest.mark.parametrize(
     "returned_vectors",
     [
-        [[1.0, 0.0]],  # Too few: query vector only
+        [[1.0, 0.0]],
         [
             [1.0, 0.0],
             [0.0, 1.0],
             [0.5, 0.5],
-        ],  # Too many: query + extra vector
+        ],
     ],
 )
 def test_retrieve_rejects_wrong_number_of_embedding_vectors(
@@ -152,7 +188,9 @@ def test_retrieve_rejects_wrong_number_of_embedding_vectors(
             return returned_vectors
 
     retriever = EvidenceRetriever(embedder=MalformedEmbedder())
-    evidence = [make_evidence(1, "Database connection pool exhausted")]
+    evidence = [
+        make_evidence(1, "Database connection pool exhausted")
+    ]
 
     with pytest.raises(
         ValueError,
@@ -161,7 +199,6 @@ def test_retrieve_rejects_wrong_number_of_embedding_vectors(
         retriever.retrieve("Why is payment failing?", evidence)
 
     assert retriever._embedding_cache == {}
-
 
 
 def test_retriever_defaults_to_local_embedder(monkeypatch):
@@ -199,9 +236,7 @@ def test_retriever_rejects_unsupported_provider(monkeypatch):
         EvidenceRetriever()
 
 
-def test_explicit_embedder_overrides_configured_provider(
-    monkeypatch,
-):
+def test_explicit_embedder_overrides_configured_provider(monkeypatch):
     embedder = FakeEmbedder()
 
     def unexpected_provider_lookup():
@@ -217,3 +252,150 @@ def test_explicit_embedder_overrides_configured_provider(
     retriever = EvidenceRetriever(embedder=embedder)
 
     assert retriever.embedder is embedder
+
+
+def test_topology_boosts_traces_for_mentioned_service_and_dependency():
+    retriever = EvidenceRetriever(embedder=ConstantFakeEmbedder())
+
+    evidence = [
+        make_trace(
+            evidence_id=1,
+            service_name="frontend",
+            span_id="c" * 16,
+            trace_id="2" * 32,
+        ),
+        make_trace(
+            evidence_id=2,
+            service_name="database",
+            span_id="a" * 16,
+        ),
+        make_trace(
+            evidence_id=3,
+            service_name="payment-service",
+            span_id="b" * 16,
+            parent_span_id="a" * 16,
+        ),
+    ]
+
+    results = retriever.retrieve(
+        query="Investigate the payment service failure",
+        evidence_items=evidence,
+        top_k=3,
+    )
+
+    returned_ids = [
+        result.chunk.evidence_id
+        for result in results
+    ]
+
+    # The payment service and its directly connected database dependency
+    # are promoted above the unrelated frontend trace.
+    assert returned_ids == [2, 3, 1]
+
+    assert results[0].score == pytest.approx(1.10)
+    assert results[1].score == pytest.approx(1.10)
+    assert results[2].score == pytest.approx(1.00)
+
+
+def test_topology_does_not_change_ranking_when_query_has_no_service_match():
+    retriever = EvidenceRetriever(embedder=ConstantFakeEmbedder())
+
+    evidence = [
+        make_trace(
+            evidence_id=1,
+            service_name="frontend",
+            span_id="c" * 16,
+            trace_id="2" * 32,
+        ),
+        make_trace(
+            evidence_id=2,
+            service_name="database",
+            span_id="a" * 16,
+        ),
+        make_trace(
+            evidence_id=3,
+            service_name="payment-service",
+            span_id="b" * 16,
+            parent_span_id="a" * 16,
+        ),
+    ]
+
+    results = retriever.retrieve(
+        query="Investigate an unknown failure",
+        evidence_items=evidence,
+        top_k=3,
+    )
+
+    assert [
+        result.chunk.evidence_id
+        for result in results
+    ] == [1, 2, 3]
+
+    assert all(
+        result.score == pytest.approx(1.0)
+        for result in results
+    )
+
+
+def test_topology_does_not_boost_log_evidence():
+    retriever = EvidenceRetriever(embedder=ConstantFakeEmbedder())
+
+    evidence = [
+        make_evidence(
+            1,
+            "Payment service returned an error",
+            source_type="log",
+        ),
+        make_trace(
+            evidence_id=2,
+            service_name="payment-service",
+            span_id="a" * 16,
+        ),
+    ]
+
+    results = retriever.retrieve(
+        query="Investigate the payment service failure",
+        evidence_items=evidence,
+        top_k=2,
+    )
+
+    assert results[0].chunk.evidence_id == 2
+    assert results[0].score == pytest.approx(1.10)
+
+    assert results[1].chunk.evidence_id == 1
+    assert results[1].score == pytest.approx(1.00)
+
+
+
+def test_topology_does_not_match_partial_service_name():
+    retriever = EvidenceRetriever(embedder=ConstantFakeEmbedder())
+
+    evidence = [
+        make_trace(
+            evidence_id=1,
+            service_name="pay",
+            span_id="a" * 16,
+        ),
+        make_trace(
+            evidence_id=2,
+            service_name="frontend",
+            span_id="b" * 16,
+            trace_id="2" * 32,
+        ),
+    ]
+
+    results = retriever.retrieve(
+        query="Investigate the payment service failure",
+        evidence_items=evidence,
+        top_k=2,
+    )
+
+    assert [
+        result.chunk.evidence_id
+        for result in results
+    ] == [1, 2]
+
+    assert all(
+        result.score == pytest.approx(1.0)
+        for result in results
+    )
