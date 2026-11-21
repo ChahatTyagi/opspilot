@@ -494,6 +494,12 @@ def investigate_incident(
 
     except OllamaRequestError as exc:
         db.rollback()
+
+        logger.exception(
+            "Ollama request failed during investigation for incident %s",
+            incident_id,
+        )
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI investigation provider is unavailable",
