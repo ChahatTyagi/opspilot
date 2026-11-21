@@ -1,61 +1,120 @@
-
 # OpsPilot
 
-**Evidence-driven AI incident investigation platform**
+**Evidence-Driven AI Incident Investigation Platform**
 
-OpsPilot helps engineers investigate software incidents by organizing incident details and evidence, identifying recurring patterns, retrieving relevant historical context, and generating structured AI-assisted investigation reports.
+OpsPilot is an AI-powered incident investigation platform designed to help engineers understand, investigate, and troubleshoot software incidents.
 
-## Features
+It combines incident management, evidence collection, log-pattern analysis, semantic retrieval, OpenTelemetry trace ingestion, service topology awareness, and structured AI-assisted investigation into a unified workflow.
 
-- **Incident management** — create, view, update, and track incidents.
-- **Evidence collection** — attach incident-specific evidence for investigation.
-- **Evidence analysis** — identify patterns and relevant signals in collected evidence.
-- **AI-assisted investigations** — generate investigation findings, hypotheses, and confidence assessments.
-- **Semantic evidence retrieval** — retrieve relevant evidence to provide additional context for investigations.
-- **Structured investigation reports** — combine incident information, analysis, AI findings, and retrieved evidence.
-- **API reliability features** — health and database readiness checks, request IDs, and error handling.
-- **Web dashboard** — React-based interface for interacting with OpsPilot.
+The goal is to make incident investigation more systematic, explainable, and evidence-driven.
 
-## Tech Stack
+## Key Features
 
-### Backend
-- Python
-- FastAPI
-- SQLAlchemy
-- Alembic
-- PostgreSQL
-- Pytest
+- **Incident Management:** Create, track, retrieve, and update software incidents.
+- **Evidence Collection:** Associate logs, metrics, traces, deployment events, and investigation notes with incidents.
+- **Log Pattern Analysis:** Normalize recurring log patterns and identify potentially relevant signals.
+- **Semantic Evidence Retrieval:** Retrieve relevant historical evidence using semantic and lexical relevance.
+- **OpenTelemetry Trace Ingestion:** Process trace data and extract service-level relationships.
+- **Service Topology Awareness:** Use service relationships and topology signals to improve evidence retrieval.
+- **AI-Assisted Investigation:** Generate structured facts, hypotheses, confidence assessments, recommended checks, and unknowns.
+- **Evidence Validation:** Validate AI-generated findings against the evidence available in the investigation context.
+- **Investigation History:** Persist investigation results for later review.
+- **Structured Investigation Reports:** Combine incident details, retrieved evidence, analysis, and AI findings.
+- **API Reliability:** Request IDs, health checks, database readiness checks, and centralized error handling.
+- **Interactive Dashboard:** React and TypeScript interface for incident management and investigation.
 
-### AI and Retrieval
-- OpenAI API
-- Semantic evidence retrieval
-- Evidence-based investigation reporting
+## Architecture
 
-### Frontend
-- React
-- TypeScript
-- Vite
+```mermaid
+flowchart TD
+    A[React + TypeScript Dashboard] --> B[FastAPI Backend]
+    B --> C[Incident Management]
+    B --> D[Evidence Ingestion]
+    D --> E[Log Pattern Analysis]
+    D --> F[OpenTelemetry Trace Processing]
+    F --> G[Service Topology]
+    E --> H[Evidence Retrieval]
+    G --> H
+    H --> I[Incident Context Builder]
+    I --> J[AI Investigation Service]
+    J --> K[Evidence Validation]
+    K --> L[Structured Findings]
+    B --> M[PostgreSQL]
+    J --> N[Ollama / OpenAI]
+    L --> M
+    B --> O[Investigation Reports]
+```
+
+### Investigation Workflow
+
+1. An engineer creates an incident through the dashboard.
+2. Relevant evidence is attached to the incident.
+3. OpsPilot processes evidence and identifies useful patterns.
+4. The retrieval system searches for relevant evidence.
+5. The investigation context is assembled with bounded evidence and source references.
+6. The AI investigation service generates structured findings and hypotheses.
+7. Evidence validation checks that referenced evidence exists in the investigation context.
+8. The investigation result is saved and can be reviewed later.
+9. A structured report can be generated using incident details and retrieved evidence.
+
+## Technology Stack
+
+| Layer | Technologies |
+|---|---|
+| Backend | Python, FastAPI |
+| Database | PostgreSQL, SQLAlchemy |
+| Database Migrations | Alembic |
+| AI Integration | Ollama, OpenAI API |
+| Language Models | Qwen models |
+| Embeddings | all-minilm |
+| Retrieval | Semantic and lexical retrieval |
+| Observability | OpenTelemetry trace processing |
+| Frontend | React, TypeScript, Vite |
+| Testing | Pytest, ESLint, TypeScript |
+| Version Control | Git, GitHub |
 
 ## Project Structure
 
 ```text
 opspilot/
-├── app/                  # FastAPI application and investigation logic
-├── migrations/            # Alembic database migrations
-├── scripts/               # Supporting scripts
-├── tests/                 # Automated tests
-├── frontend/               # React + TypeScript dashboard
-├── requirements.txt        # Python application dependencies
-├── requirements-db.txt     # Database dependencies
-├── TESTING.md              # Test and database integration guidance
+├── app/
+│   ├── main.py
+│   ├── models.py
+│   ├── db_models.py
+│   ├── database.py
+│   ├── config.py
+│   ├── analyzer.py
+│   ├── chunking.py
+│   ├── embeddings.py
+│   ├── retrieval.py
+│   ├── retrieval_service.py
+│   ├── report_builder.py
+│   ├── ai_models.py
+│   ├── evidence_validation.py
+│   ├── llm_client.py
+│   ├── incident_context.py
+│   └── investigation_service.py
+├── experiments/
+│   └── topology retrieval experiments and evaluation datasets
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.ts
+├── migrations/
+├── scripts/
+├── tests/
+├── requirements.txt
+├── requirements-db.txt
+├── TESTING.md
 └── README.md
 ```
 
 ## Prerequisites
 
-- Python
+- Python 3.13 (used during project development and testing)
 - Node.js and npm
 - PostgreSQL
+- Ollama for local AI inference
 - Git
 
 ## Local Setup
@@ -72,52 +131,98 @@ cd opspilot
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-db.txt
 ```
 
-### 3. Configure environment variables
+### 3. Configure PostgreSQL
 
-Create a `.env` file in the project root.
+Create a PostgreSQL database for OpsPilot.
 
-```env
-DATABASE_URL=postgresql+psycopg://<username>:<password>@localhost:5432/<database_name>
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4.1-mini
+For example:
+
+```sql
+CREATE DATABASE opspilot;
 ```
 
-- `DATABASE_URL` is required and must point to your PostgreSQL database.
-- `OPENAI_API_KEY` is needed for AI-powered investigation requests.
-- `OPENAI_MODEL` selects the model used for AI investigations.
+Configure the database connection through the `DATABASE_URL` environment variable.
 
-Keep credentials in `.env`. Do not commit this file.
+### 4. Configure Ollama
 
-### 4. Apply database migrations
+Install Ollama and make sure its local service is running.
 
-Make sure PostgreSQL is running and the database specified by `DATABASE_URL` exists.
+Pull the models used by the local configuration:
+
+```powershell
+ollama pull qwen3:4b
+ollama pull qwen3.5:9b-q4_K_M
+ollama pull all-minilm
+```
+
+Create a `.env` file in the repository root:
+
+```env
+DATABASE_URL=postgresql+psycopg://username:password@localhost:5432/opspilot
+
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3:4b
+OLLAMA_TIMEOUT_SECONDS=300
+
+VERIFIER_MODEL=qwen3.5:9b-q4_K_M
+
+EMBEDDING_PROVIDER=ollama
+OLLAMA_EMBEDDING_MODEL=all-minilm
+```
+
+Replace the database username and password with your local PostgreSQL credentials.
+
+Optional Ollama configuration:
+
+```env
+OLLAMA_NUM_PREDICT=1024
+OLLAMA_NUM_CTX=8192
+```
+
+The project also supports OpenAI configuration through `LLM_PROVIDER`, `OPENAI_API_KEY`, and `OPENAI_MODEL`. Refer to the configuration implementation for the available defaults.
+
+**Security:** Keep `.env` out of version control. Never commit API keys or database credentials.
+
+### 5. Apply database migrations
+
+Ensure PostgreSQL is running and the configured database exists.
 
 ```powershell
 python -m alembic upgrade head
 ```
 
-This applies the database schema migrations.
+### 6. Start the backend
 
-### 5. Start the backend
+From the repository root:
 
 ```powershell
 python -m uvicorn app.main:app --reload
 ```
 
-Backend API: http://127.0.0.1:8000
+Backend:
 
-Interactive API documentation: http://127.0.0.1:8000/docs
+`http://127.0.0.1:8000`
 
-Health endpoint: http://127.0.0.1:8000/health
+Interactive API documentation:
 
-Database readiness endpoint: http://127.0.0.1:8000/ready
+`http://127.0.0.1:8000/docs`
 
-### 6. Start the frontend
+Health check:
+
+`http://127.0.0.1:8000/health`
+
+Database readiness:
+
+`http://127.0.0.1:8000/ready`
+
+### 7. Start the frontend
 
 Open a second terminal:
 
@@ -127,45 +232,109 @@ npm install
 npm run dev
 ```
 
-Vite will display the local frontend URL in the terminal.
+Vite displays the frontend URL in the terminal, typically:
+
+`http://localhost:5173`
+
+The Vite development proxy forwards `/api` requests to the FastAPI backend.
 
 ## Testing
 
-Run the standard backend test suite from the project root:
+### Backend tests
+
+Activate the Python virtual environment and run:
 
 ```powershell
 python -m pytest -q -rs
 ```
 
-The PostgreSQL integration test is optional and requires a separate local test database. Follow the safety instructions in [TESTING.md](TESTING.md); do not point integration tests at your development or production database.
+Latest verified result:
 
-Check the frontend build:
+```text
+602 passed, 1 skipped
+```
+
+The skipped test is the PostgreSQL integration test, which requires a dedicated test database.
+
+### PostgreSQL integration test
+
+Follow the instructions in [TESTING.md](TESTING.md).
+
+The integration test requires a separate database named `opspilot_test` and the `OPSPILOT_TEST_DATABASE_URL` environment variable.
+
+Never point integration tests at your development or production database.
+
+### Frontend validation
+
+Run linting:
 
 ```powershell
 cd frontend
-npm run build
-```
-
-Run frontend linting:
-
-```powershell
 npm run lint
 ```
 
-## API Overview
+Build the production frontend:
 
-The API supports:
+```powershell
+npm run build
+```
 
-- Health and database readiness checks
-- Incident creation, listing, retrieval, and updates
-- Incident evidence management
-- Evidence analysis
-- Investigation context retrieval
-- AI-assisted incident investigations
-- Structured investigation reports
+Both checks have passed in the latest project validation.
 
-See the interactive API documentation at `/docs` for available endpoints and request/response schemas.
+## Retrieval Research
 
-## Project Status
+OpsPilot includes experimental evaluations of topology-aware evidence retrieval.
 
-OpsPilot is an actively developed project focused on building a reliable incident investigation workflow that combines backend systems engineering, evidence processing, semantic retrieval, and AI-assisted analysis.
+The research explores how service relationships can influence evidence ranking and whether topology signals improve the ordering of relevant evidence.
+
+The experimental progression includes:
+
+- Topology-aware retrieval evaluation datasets.
+- V2 and V3 retrieval experiments.
+- Multiple V3 refinements, including V3.1, V3.2, and V3.3.
+- Recall@K, Precision@K, and Mean Reciprocal Rank (MRR) evaluation.
+- Comparisons across service-anchored and symptom-only queries.
+- Direct and diagnostic relevance perspectives.
+
+The V3.3 evaluation used 20 synthetic scenarios and 260 evidence records.
+
+The strongest tested topology boost candidate improved average MRR from 0.7844 to 0.8594 when compared with the 0.20 boost setting at 0.40 strength. Recall@5 and Precision@5 remained unchanged in that comparison.
+
+These results are limited to the synthetic benchmark. They do not establish production-wide optimality, and the experimental findings have not been treated as a production retrieval configuration change.
+
+Experiment scripts and test cases are preserved in the `experiments/` and `tests/` directories.
+
+## API Capabilities
+
+The backend exposes functionality for:
+
+- Health and readiness checks.
+- Incident creation, retrieval, listing, and updates.
+- Incident evidence management.
+- Evidence analysis.
+- Investigation context retrieval.
+- AI-assisted investigations.
+- Investigation history.
+- Structured investigation reports.
+- OpenTelemetry trace ingestion and service topology processing.
+
+For exact endpoints, request schemas, and response formats, visit `/docs` while the backend is running.
+
+## Current Project Status
+
+OpsPilot has a functioning full-stack incident investigation workflow, local LLM integration, persistent investigation results, semantic evidence retrieval, and topology-aware retrieval research.
+
+Latest verified validation:
+
+- Backend: 602 tests passed, 1 skipped.
+- Frontend: ESLint passed.
+- Frontend: TypeScript compilation and Vite production build passed.
+- Backend health and readiness checks passed.
+- Frontend-to-backend proxy verified.
+- AI investigation and persistence verified through the application.
+
+The PostgreSQL integration test remains pending execution against its dedicated test database.
+
+---
+
+**Built as a hands-on exploration of backend engineering, AI-assisted incident investigation, retrieval systems, observability, and reliable software workflows.**
