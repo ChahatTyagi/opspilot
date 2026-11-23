@@ -1,20 +1,26 @@
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.auth_routes import get_current_user
+from app.auth_routes import get_current_session, get_current_user
 from app.database import get_db
 from app.identity_models import (
     Organization,
     OrganizationMembership,
     Project,
     User,
+    UserSession,
 )
 from app.workspace_models import (
+    CurrentWorkspaceResponse,
     WorkspaceListResponse,
     WorkspaceProjectResponse,
     WorkspaceResponse,
+    WorkspaceSelectionRequest,
 )
 
 
@@ -80,6 +86,124 @@ def _build_workspace_responses(
     return responses
 
 
+def _get_member_workspace_row(
+    db: Session,
+    user_id: int,
+    workspace_id: int,
+):
+    """
+    Return a workspace and the user's role only when membership exists.
+    """
+
+    statement = (
+        select(
+            Organization,
+            OrganizationMembership.role,
+        )
+        .join(
+            OrganizationMembership,
+            OrganizationMembership.organization_id == Organization.id,
+        )
+        .where(
+            Organization.id == workspace_id,
+            OrganizationMembership.user_id == user_id,
+        )
+    )
+
+    return db.execute(statement).first()
+
+
+@router.get(
+    "/current",
+    response_model=CurrentWorkspaceResponse,
+)
+def get_current_workspace(
+    current_user: User = Depends(get_current_user),
+    session_record: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the workspace selected in the current browser session.
+
+    A missing selection or a selection without valid membership
+    returns workspace=null.
+    """
+
+    workspace_id = session_record.current_organization_id
+
+    if workspace_id is None:
+        return CurrentWorkspaceResponse(workspace=None)
+
+    workspace_row = _get_member_workspace_row(
+        db,
+        current_user.id,
+        workspace_id,
+    )
+
+    if workspace_row is None:
+        return CurrentWorkspaceResponse(workspace=None)
+
+    workspace = _build_workspace_responses(
+        db,
+        [workspace_row],
+    )[0]
+
+    return CurrentWorkspaceResponse(workspace=workspace)
+
+
+@router.put(
+    "/current",
+    response_model=CurrentWorkspaceResponse,
+)
+def select_current_workspace(
+    payload: WorkspaceSelectionRequest,
+    current_user: User = Depends(get_current_user),
+    session_record: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    """
+    Select a workspace for the current browser session.
+
+    The user must have a membership in the requested workspace.
+    The get_current_session dependency also enforces CSRF validation
+    for this PUT request.
+
+    The workspace selection timestamp is updated so that future
+    logins can restore the most recently selected workspace.
+    """
+
+    workspace_row = _get_member_workspace_row(
+        db,
+        current_user.id,
+        payload.organization_id,
+    )
+
+    if workspace_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workspace not found",
+        )
+
+    session_record.current_organization_id = payload.organization_id
+    session_record.workspace_selected_at = datetime.now(timezone.utc)
+
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to switch workspace",
+        )
+
+    workspace = _build_workspace_responses(
+        db,
+        [workspace_row],
+    )[0]
+
+    return CurrentWorkspaceResponse(workspace=workspace)
+
+
 @router.get(
     "",
     response_model=WorkspaceListResponse,
@@ -139,26 +263,15 @@ def get_workspace(
     the API does not reveal whether another user's workspace exists.
     """
 
-    statement = (
-        select(
-            Organization,
-            OrganizationMembership.role,
-        )
-        .join(
-            OrganizationMembership,
-            OrganizationMembership.organization_id == Organization.id,
-        )
-        .where(
-            Organization.id == workspace_id,
-            OrganizationMembership.user_id == current_user.id,
-        )
+    workspace_row = _get_member_workspace_row(
+        db,
+        current_user.id,
+        workspace_id,
     )
-
-    workspace_row = db.execute(statement).first()
 
     if workspace_row is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Workspace not found",
         )
 

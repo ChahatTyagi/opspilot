@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class WorkspaceProjectResponse(BaseModel):
@@ -29,3 +29,11 @@ class WorkspaceResponse(BaseModel):
 class WorkspaceListResponse(BaseModel):
     workspaces: list[WorkspaceResponse]
     total: int
+
+
+class WorkspaceSelectionRequest(BaseModel):
+    organization_id: int = Field(gt=0)
+
+
+class CurrentWorkspaceResponse(BaseModel):
+    workspace: WorkspaceResponse | None

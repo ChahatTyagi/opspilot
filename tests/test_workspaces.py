@@ -12,8 +12,10 @@ from app.identity_models import (
     OrganizationMembership,
     Project,
     User,
+    UserSession,
 )
 from app.main import app
+from app.security import hash_token
 
 
 @pytest.fixture
@@ -131,6 +133,54 @@ def create_other_user_workspace(db):
     db.commit()
 
     return other_workspace.id, legacy_workspace.id
+
+
+def create_second_member_workspace(db, user_id):
+    """
+    Create a second workspace that the given user is authorized to access.
+    """
+
+    workspace = Organization(
+        name="Acme Engineering",
+        slug="acme-engineering",
+        workspace_type="organization",
+        created_by_user_id=user_id,
+    )
+
+    db.add(workspace)
+    db.flush()
+
+    membership = OrganizationMembership(
+        organization_id=workspace.id,
+        user_id=user_id,
+        role="developer",
+    )
+
+    project = Project(
+        organization_id=workspace.id,
+        name="Payments Service",
+        slug="payments-service",
+        description="Payments project",
+        created_by_user_id=user_id,
+        is_active=True,
+    )
+
+    db.add_all([membership, project])
+    db.commit()
+
+    return workspace.id
+
+
+def get_session_record(db, client):
+    raw_token = client.cookies.get("opspilot_session")
+
+    assert raw_token is not None
+
+    return db.scalar(
+        select(UserSession).where(
+            UserSession.token_hash == hash_token(raw_token)
+        )
+    )
 
 
 def test_list_workspaces_requires_authentication(workspace_client):
@@ -291,3 +341,292 @@ def test_get_nonexistent_workspace_returns_404(workspace_client):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Workspace not found"
+
+
+def test_get_current_workspace_requires_authentication(workspace_client):
+    client, _ = workspace_client
+
+    response = client.get("/workspaces/current")
+
+    assert response.status_code == 401
+
+
+def test_get_current_workspace_returns_registration_workspace(
+    workspace_client,
+):
+    client, _ = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    expected_workspace_id = registration.json()["workspace_id"]
+
+    response = client.get("/workspaces/current")
+
+    assert response.status_code == 200
+
+    workspace = response.json()["workspace"]
+
+    assert workspace is not None
+    assert workspace["id"] == expected_workspace_id
+    assert workspace["role"] == "org_admin"
+    assert workspace["projects"][0]["name"] == "My First Project"
+
+
+def test_get_current_workspace_returns_null_for_unselected_session(
+    workspace_client,
+):
+    client, session_factory = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    db = session_factory()
+    try:
+        session_record = get_session_record(db, client)
+
+        assert session_record is not None
+
+        session_record.current_organization_id = None
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/workspaces/current")
+
+    assert response.status_code == 200
+    assert response.json() == {"workspace": None}
+
+
+def test_select_current_workspace_requires_authentication(
+    workspace_client,
+):
+    client, _ = workspace_client
+
+    response = client.put(
+        "/workspaces/current",
+        json={"organization_id": 1},
+    )
+
+    assert response.status_code == 401
+
+
+def test_select_current_workspace_requires_csrf_token(
+    workspace_client,
+):
+    client, session_factory = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    workspace_id = registration.json()["workspace_id"]
+
+    db = session_factory()
+    try:
+        session_record = get_session_record(db, client)
+
+        assert session_record is not None
+        original_workspace_id = session_record.current_organization_id
+    finally:
+        db.close()
+
+    response = client.put(
+        "/workspaces/current",
+        json={"organization_id": workspace_id},
+    )
+
+    assert response.status_code == 403
+
+    db = session_factory()
+    try:
+        session_record = get_session_record(db, client)
+
+        assert session_record is not None
+        assert session_record.current_organization_id == original_workspace_id
+    finally:
+        db.close()
+
+
+def test_select_current_workspace_switches_to_another_member_workspace(
+    workspace_client,
+):
+    client, session_factory = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    db = session_factory()
+    try:
+        user = db.scalar(select(User))
+        assert user is not None
+
+        second_workspace_id = create_second_member_workspace(
+            db,
+            user.id,
+        )
+    finally:
+        db.close()
+
+    csrf_token = client.cookies.get("opspilot_csrf")
+
+    response = client.put(
+        "/workspaces/current",
+        json={"organization_id": second_workspace_id},
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 200
+
+    response_workspace = response.json()["workspace"]
+
+    assert response_workspace is not None
+    assert response_workspace["id"] == second_workspace_id
+    assert response_workspace["name"] == "Acme Engineering"
+    assert response_workspace["role"] == "developer"
+    assert response_workspace["projects"][0]["name"] == "Payments Service"
+
+    current_response = client.get("/workspaces/current")
+
+    assert current_response.status_code == 200
+    assert (
+        current_response.json()["workspace"]["id"]
+        == second_workspace_id
+    )
+
+    db = session_factory()
+    try:
+        session_record = get_session_record(db, client)
+
+        assert session_record is not None
+        assert session_record.current_organization_id == second_workspace_id
+    finally:
+        db.close()
+
+
+def test_select_current_workspace_rejects_another_users_workspace(
+    workspace_client,
+):
+    client, session_factory = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    db = session_factory()
+    try:
+        other_workspace_id, _ = create_other_user_workspace(db)
+    finally:
+        db.close()
+
+    csrf_token = client.cookies.get("opspilot_csrf")
+
+    response = client.put(
+        "/workspaces/current",
+        json={"organization_id": other_workspace_id},
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Workspace not found"
+
+    current_response = client.get("/workspaces/current")
+
+    assert current_response.status_code == 200
+    assert (
+        current_response.json()["workspace"]["id"]
+        == registration.json()["workspace_id"]
+    )
+
+
+def test_select_current_workspace_rejects_legacy_workspace(
+    workspace_client,
+):
+    client, session_factory = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    db = session_factory()
+    try:
+        _, legacy_workspace_id = create_other_user_workspace(db)
+    finally:
+        db.close()
+
+    csrf_token = client.cookies.get("opspilot_csrf")
+
+    response = client.put(
+        "/workspaces/current",
+        json={"organization_id": legacy_workspace_id},
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 404
+
+
+def test_select_current_workspace_rejects_nonexistent_workspace(
+    workspace_client,
+):
+    client, _ = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    csrf_token = client.cookies.get("opspilot_csrf")
+
+    response = client.put(
+        "/workspaces/current",
+        json={"organization_id": 999999},
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 404
+
+
+def test_select_current_workspace_rejects_invalid_workspace_id(
+    workspace_client,
+):
+    client, _ = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    csrf_token = client.cookies.get("opspilot_csrf")
+
+    response = client.put(
+        "/workspaces/current",
+        json={"organization_id": -1},
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 422

@@ -125,21 +125,96 @@ def _create_session(
     db: Session,
     user: User,
     request: Request,
+    current_organization_id: int | None = None,
 ) -> tuple[str, str]:
+    """
+    Create a server-side session.
+
+    The active workspace and its last selection time are stored
+    on the session rather than the user, allowing the same user
+    to select different workspaces in different browser sessions.
+    """
+
     session_token = generate_session_token()
     csrf_token = generate_csrf_token()
 
+    now = datetime.now(timezone.utc)
+
     session_record = UserSession(
         user_id=user.id,
+        current_organization_id=current_organization_id,
+        workspace_selected_at=(
+            now if current_organization_id is not None else None
+        ),
         token_hash=hash_token(session_token),
         csrf_token_hash=hash_token(csrf_token),
-        expires_at=datetime.now(timezone.utc) + SESSION_DURATION,
+        expires_at=now + SESSION_DURATION,
         user_agent=request.headers.get("user-agent", "")[:500],
     )
 
     db.add(session_record)
 
     return session_token, csrf_token
+
+
+def _get_login_workspace_id(
+    db: Session,
+    user_id: int,
+) -> int | None:
+    """
+    Restore the workspace from the user's most recently selected
+    workspace across active sessions, provided the user still
+    has membership in that workspace.
+
+    If no previous valid workspace selection is available,
+    choose the user's first accessible workspace in a
+    deterministic order.
+    """
+
+    now = datetime.now(timezone.utc)
+
+    previous_workspace_id = db.scalar(
+        select(UserSession.current_organization_id)
+        .join(
+            OrganizationMembership,
+            OrganizationMembership.organization_id
+            == UserSession.current_organization_id,
+        )
+        .where(
+            UserSession.user_id == user_id,
+            UserSession.current_organization_id.is_not(None),
+            UserSession.workspace_selected_at.is_not(None),
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+            OrganizationMembership.user_id == user_id,
+        )
+        .order_by(
+            UserSession.workspace_selected_at.desc(),
+            UserSession.created_at.desc(),
+        )
+        .limit(1)
+    )
+
+    if previous_workspace_id is not None:
+        return previous_workspace_id
+
+    first_workspace_id = db.scalar(
+        select(OrganizationMembership.organization_id)
+        .join(
+            Organization,
+            Organization.id == OrganizationMembership.organization_id,
+        )
+        .where(
+            OrganizationMembership.user_id == user_id,
+        )
+        .order_by(
+            Organization.created_at,
+            Organization.id,
+        )
+        .limit(1)
+    )
+
+    return first_workspace_id
 
 
 def _get_user_response(user: User) -> UserResponse:
@@ -317,6 +392,7 @@ def register(
             db,
             user,
             request,
+            current_organization_id=organization.id,
         )
 
         # One commit for user, workspace, membership, project, and session.
@@ -398,10 +474,16 @@ def login(
         if password_hash_needs_update(user.password_hash):
             user.password_hash = hash_password(payload.password)
 
+        current_organization_id = _get_login_workspace_id(
+            db,
+            user.id,
+        )
+
         session_token, csrf_token = _create_session(
             db,
             user,
             request,
+            current_organization_id=current_organization_id,
         )
 
         db.commit()

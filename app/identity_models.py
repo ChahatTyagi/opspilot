@@ -241,6 +241,19 @@ class UserSession(Base):
         nullable=False,
     )
 
+    # The workspace currently selected in this specific login session.
+    # Nullable to support existing sessions and sessions without a selection.
+    current_organization_id = Column(
+        Integer,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Records when this session last selected a workspace.
+    workspace_selected_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     token_hash = Column(String(64), nullable=False, unique=True)
     csrf_token_hash = Column(String(64), nullable=False)
 

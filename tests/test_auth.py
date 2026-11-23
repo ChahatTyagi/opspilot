@@ -152,6 +152,7 @@ def test_register_creates_personal_workspace_project_and_session(
         )
 
         assert session_record is not None
+        assert session_record.current_organization_id == workspace.id
 
         raw_session_token = client.cookies.get("opspilot_session")
 
@@ -218,6 +219,15 @@ def test_register_creates_organization_workspace(auth_client):
         assert project is not None
         assert project.name == "Payments Service"
         assert project.organization_id == workspace.id
+
+        session_record = db.scalar(
+            select(UserSession).where(
+                UserSession.user_id == membership.user_id
+            )
+        )
+
+        assert session_record is not None
+        assert session_record.current_organization_id == workspace.id
 
     finally:
         db.close()
@@ -289,7 +299,12 @@ def test_registration_rolls_back_all_records_if_session_creation_fails(
 ):
     client, session_factory = auth_client
 
-    def fail_session_creation(db, user, request):
+    def fail_session_creation(
+        db,
+        user,
+        request,
+        current_organization_id=None,
+    ):
         raise SQLAlchemyError("Simulated session creation failure")
 
     monkeypatch.setattr(
@@ -399,7 +414,7 @@ def test_register_rejects_short_password(auth_client):
 
 
 def test_login_accepts_correct_credentials(auth_client):
-    client, _ = auth_client
+    client, session_factory = auth_client
 
     registration = client.post(
         "/auth/register",
@@ -407,6 +422,8 @@ def test_login_accepts_correct_credentials(auth_client):
     )
 
     assert registration.status_code == 201
+
+    workspace_id = registration.json()["workspace_id"]
 
     client.cookies.clear()
 
@@ -422,6 +439,22 @@ def test_login_accepts_correct_credentials(auth_client):
     assert response.json()["email"] == "developer@example.com"
     assert client.cookies.get("opspilot_session")
     assert client.cookies.get("opspilot_csrf")
+
+    db = session_factory()
+    try:
+        raw_token = client.cookies.get("opspilot_session")
+
+        login_session = db.scalar(
+            select(UserSession).where(
+                UserSession.token_hash == hash_token(raw_token)
+            )
+        )
+
+        assert login_session is not None
+        assert login_session.current_organization_id == workspace_id
+
+    finally:
+        db.close()
 
 
 def test_login_rejects_wrong_password(auth_client):
