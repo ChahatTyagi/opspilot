@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_models import AIInvestigationResult
 from app.analyzer import analyze_evidence
+from app.auth_routes import router as auth_router
 from app.config import get_allowed_origins
 from app.database import get_db
 from app.db_models import (
@@ -58,13 +59,15 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_allowed_origins(),
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.state.evidence_retriever = EvidenceRetriever()
+
 app.include_router(telemetry_router)
+app.include_router(auth_router)
 
 
 @app.middleware("http")
@@ -531,7 +534,6 @@ def investigate_incident(
         ) from exc
 
 
-
 @app.get(
     "/incidents/{incident_id}/investigations",
     response_model=list[InvestigationHistoryResponse],
@@ -603,7 +605,7 @@ def get_investigation_report(
 
     if incident is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Incident {incident_id} not found",
         )
 
