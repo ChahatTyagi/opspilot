@@ -71,6 +71,17 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def generate_project_api_key() -> str:
+    """
+    Generate a cryptographically secure project telemetry API key.
+
+    The random portion contains 256 bits of entropy.
+    The raw key must only be displayed once.
+    """
+
+    return f"opsp_live_{secrets.token_urlsafe(32)}"
+
+
 def hash_token(token: str) -> str:
     """Return a SHA-256 digest of a random token."""
 

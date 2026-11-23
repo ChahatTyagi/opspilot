@@ -1,32 +1,53 @@
+
+import re
+from unittest.mock import patch
+
 import pytest
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openai import RateLimitError
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-from unittest.mock import patch
-from openai import RateLimitError
+
 from app.ai_models import AIInvestigationResult
+from app.auth_routes import get_current_user
+from app.config import get_database_url
 from app.database import Base, get_db
 from app.db_models import (
     IncidentEvidence,
     IncidentInvestigation,
     IncidentRecord,
 )
+from app.identity_models import (
+    Organization,
+    OrganizationMembership,
+    Project,
+    User,
+)
+from app.investigation_service import UnsupportedLLMProviderError
 from app.main import app
 from app.ollama_client import OllamaRequestError
-from app.investigation_service import UnsupportedLLMProviderError
+
+
+# =============================================================
+# Test database setup
+# =============================================================
+
 test_engine = create_engine(
     "sqlite://",
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
 @event.listens_for(test_engine, "connect")
 def enable_sqlite_foreign_keys(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
+
 
 TestSessionLocal = sessionmaker(
     bind=test_engine,
@@ -39,16 +60,17 @@ Base.metadata.create_all(bind=test_engine)
 
 def override_get_db():
     db = TestSessionLocal()
+
     try:
         yield db
     finally:
         db.close()
 
 
-
 @pytest.fixture(scope="module", autouse=True)
 def configure_test_database():
     previous_override = app.dependency_overrides.get(get_db)
+
     app.dependency_overrides[get_db] = override_get_db
 
     yield
@@ -59,14 +81,132 @@ def configure_test_database():
         app.dependency_overrides[get_db] = previous_override
 
 
-
 client = TestClient(app)
 
-@pytest.fixture(autouse=True)
-def reset_incidents():
-    with test_engine.begin() as connection:
-        connection.execute(IncidentRecord.__table__.delete())
 
+# =============================================================
+# Per-test user, workspace, and project setup
+# =============================================================
+
+@pytest.fixture(autouse=True)
+def reset_incidents(monkeypatch):
+    """
+    Reset the test database and create an authenticated test user
+    with a personal workspace and project before every test.
+
+    Authentication and CSRF behavior are tested separately in
+    tests/test_auth.py. Here we override only get_current_user.
+
+    Project authorization itself is NOT bypassed.
+    """
+
+    # Delete all records in reverse foreign-key dependency order.
+    with test_engine.begin() as connection:
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(table.delete())
+
+    db = TestSessionLocal()
+
+    try:
+        # -----------------------------------------------------
+        # Create test user
+        # -----------------------------------------------------
+
+        user = User(
+            email="incident-tester@example.com",
+            display_name="Incident Test User",
+            password_hash="test-hash",
+        )
+
+        db.add(user)
+        db.flush()
+
+        # -----------------------------------------------------
+        # Create personal workspace
+        # -----------------------------------------------------
+
+        workspace = Organization(
+            name="Incident Test Workspace",
+            slug="incident-test-workspace",
+            workspace_type="personal",
+            created_by_user_id=user.id,
+        )
+
+        db.add(workspace)
+        db.flush()
+
+        membership = OrganizationMembership(
+            organization_id=workspace.id,
+            user_id=user.id,
+            role="org_admin",
+        )
+
+        db.add(membership)
+
+        # -----------------------------------------------------
+        # Create project
+        # -----------------------------------------------------
+
+        project = Project(
+            organization_id=workspace.id,
+            name="Incident Test Project",
+            slug="incident-test-project",
+            created_by_user_id=user.id,
+            is_active=True,
+        )
+
+        db.add(project)
+        db.commit()
+
+        user_id = user.id
+        project_id = project.id
+
+    finally:
+        db.close()
+
+    # ---------------------------------------------------------
+    # Override authentication dependency
+    # ---------------------------------------------------------
+
+    def override_current_user():
+        return type(
+            "TestUser",
+            (),
+            {"id": user_id},
+        )()
+
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_current_user,
+        override_current_user,
+    )
+
+    # ---------------------------------------------------------
+    # Automatically provide project_id to legacy test requests
+    # ---------------------------------------------------------
+
+    original_post = client.post
+
+    def test_post(url, *args, **kwargs):
+        if url == "/incidents":
+            payload = kwargs.get("json")
+
+            if isinstance(payload, dict) and "project_id" not in payload:
+                kwargs["json"] = {
+                    **payload,
+                    "project_id": project_id,
+                }
+
+        return original_post(url, *args, **kwargs)
+
+    monkeypatch.setattr(client, "post", test_post)
+
+    yield
+
+
+# =============================================================
+# Health and incident CRUD
+# =============================================================
 
 def test_health_check():
     response = client.get("/health")
@@ -87,7 +227,9 @@ def test_create_incident():
     )
 
     assert response.status_code == 201
+
     data = response.json()
+
     assert data["id"] is not None
     assert data["severity"] == "high"
     assert data["status"] == "open"
@@ -123,6 +265,7 @@ def test_get_incident():
     )
 
     incident_id = created.json()["id"]
+
     response = client.get(f"/incidents/{incident_id}")
 
     assert response.status_code == 200
@@ -193,6 +336,7 @@ def test_update_incident_status():
     assert fetched.status_code == 200
     assert fetched.json()["status"] == "investigating"
 
+
 def test_update_incident_invalid_status():
     created = client.post(
         "/incidents",
@@ -222,6 +366,10 @@ def test_update_missing_incident():
     assert response.status_code == 404
 
 
+# =============================================================
+# Incident filtering and pagination
+# =============================================================
+
 def test_filter_incidents_by_severity():
     client.post(
         "/incidents",
@@ -232,6 +380,7 @@ def test_filter_incidents_by_severity():
             "severity": "critical",
         },
     )
+
     client.post(
         "/incidents",
         json={
@@ -258,6 +407,7 @@ def test_filter_incidents_by_status():
             "service": "payment",
         },
     )
+
     incident_id = created.json()["id"]
 
     client.patch(
@@ -281,6 +431,7 @@ def test_filter_incidents_by_service():
             "service": "payment",
         },
     )
+
     client.post(
         "/incidents",
         json={
@@ -320,6 +471,7 @@ def test_incident_invalid_pagination():
 
     assert response.status_code == 422
 
+
 def test_filter_incidents_by_environment():
     client.post(
         "/incidents",
@@ -331,6 +483,7 @@ def test_filter_incidents_by_environment():
             "severity": "critical",
         },
     )
+
     client.post(
         "/incidents",
         json={
@@ -360,6 +513,7 @@ def test_combine_incident_filters():
             "severity": "critical",
         },
     )
+
     client.post(
         "/incidents",
         json={
@@ -382,7 +536,16 @@ def test_combine_incident_filters():
     assert response.json()[0]["service"] == "payment"
 
 
+def test_list_incidents_returns_empty_list_when_no_matches():
+    response = client.get("/incidents?service=nonexistent-service")
 
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# =============================================================
+# Incident database error handling
+# =============================================================
 
 def test_create_incident_database_failure(caplog):
     with (
@@ -407,27 +570,73 @@ def test_create_incident_database_failure(caplog):
     assert response.json()["detail"] == (
         "Unable to create incident due to a database error"
     )
+
     mock_rollback.assert_called_once()
+
     assert "Database error while creating incident" in caplog.text
 
 
+def test_update_incident_rolls_back_on_commit_failure(monkeypatch):
+    created = client.post(
+        "/incidents",
+        json={
+            "title": "Rollback test",
+            "description": "Testing a simulated database failure.",
+            "service": "payment",
+            "severity": "high",
+        },
+    )
 
-def test_list_incidents_returns_empty_list_when_no_matches():
-    response = client.get("/incidents?service=nonexistent-service")
+    incident_id = created.json()["id"]
 
-    assert response.status_code == 200
-    assert response.json() == []
+    rollback_called = False
+    original_rollback = Session.rollback
 
+    def fail_commit(self):
+        raise SQLAlchemyError("Simulated commit failure")
+
+    def track_rollback(self):
+        nonlocal rollback_called
+        rollback_called = True
+        return original_rollback(self)
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    monkeypatch.setattr(Session, "rollback", track_rollback)
+
+    response = client.patch(
+        f"/incidents/{incident_id}",
+        json={"status": "investigating"},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == (
+        "Unable to update incident due to a database error"
+    )
+    assert rollback_called is True
+
+    fetched = client.get(f"/incidents/{incident_id}")
+
+    assert fetched.status_code == 200
+    assert fetched.json()["status"] == "open"
+
+
+# =============================================================
+# Exception handling and request IDs
+# =============================================================
 
 def test_global_exception_handler():
     test_app = FastAPI()
 
-    from app.main import global_exception_handler, request_logging_middleware
+    from app.main import (
+        global_exception_handler,
+        request_logging_middleware,
+    )
 
     test_app.add_exception_handler(
         Exception,
         global_exception_handler,
     )
+
     test_app.middleware("http")(request_logging_middleware)
 
     @test_app.get("/test-unhandled-error")
@@ -446,10 +655,6 @@ def test_global_exception_handler():
     }
     assert "sensitive internal details" not in response.text
     assert response.headers.get("X-Request-ID")
-
-
-
-import re
 
 
 def test_request_id_is_generated():
@@ -488,16 +693,16 @@ def test_invalid_request_id_is_replaced():
 
     assert response.status_code == 200
     assert returned_id != supplied_id
+
     assert re.fullmatch(
         r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
         returned_id,
     )
 
 
-import pytest
-
-from app.config import get_database_url
-
+# =============================================================
+# Configuration and readiness
+# =============================================================
 
 def test_missing_database_url_raises_error():
     with patch.dict("os.environ", {}, clear=True):
@@ -532,48 +737,10 @@ def test_readiness_check_database_unavailable():
         "detail": "Database is unavailable"
     }
 
-def test_update_incident_rolls_back_on_commit_failure(monkeypatch):
-    created = client.post(
-        "/incidents",
-        json={
-            "title": "Rollback test",
-            "description": "Testing a simulated database failure.",
-            "service": "payment",
-            "severity": "high",
-        },
-    )
-    incident_id = created.json()["id"]
 
-    rollback_called = False
-    original_rollback = Session.rollback
-
-    def fail_commit(self):
-        raise SQLAlchemyError("Simulated commit failure")
-
-    def track_rollback(self):
-        nonlocal rollback_called
-        rollback_called = True
-        return original_rollback(self)
-
-    monkeypatch.setattr(Session, "commit", fail_commit)
-    monkeypatch.setattr(Session, "rollback", track_rollback)
-
-    response = client.patch(
-        f"/incidents/{incident_id}",
-        json={"status": "investigating"},
-    )
-
-    assert response.status_code == 500
-    assert response.json()["detail"] == (
-        "Unable to update incident due to a database error"
-    )
-    assert rollback_called is True
-
-    fetched = client.get(f"/incidents/{incident_id}")
-
-    assert fetched.status_code == 200
-    assert fetched.json()["status"] == "open"
-
+# =============================================================
+# Database session lifecycle
+# =============================================================
 
 def test_get_db_closes_session():
     db_generator = get_db()
@@ -584,6 +751,11 @@ def test_get_db_closes_session():
 
     mock_close.assert_called_once_with(db)
 
+
+# =============================================================
+# Evidence persistence and cascade behavior
+# =============================================================
+
 def test_incident_evidence_is_persisted():
     with TestSessionLocal() as db:
         incident = IncidentRecord(
@@ -593,6 +765,7 @@ def test_incident_evidence_is_persisted():
             environment="test",
             severity="high",
         )
+
         db.add(incident)
         db.commit()
         db.refresh(incident)
@@ -602,6 +775,7 @@ def test_incident_evidence_is_persisted():
             source_type="log",
             content="Database connection timeout observed.",
         )
+
         db.add(evidence)
         db.commit()
         db.refresh(evidence)
@@ -615,6 +789,7 @@ def test_incident_evidence_is_persisted():
             "Database connection timeout observed."
         )
 
+
 def test_deleting_incident_deletes_its_evidence():
     with TestSessionLocal() as db:
         incident = IncidentRecord(
@@ -624,6 +799,7 @@ def test_deleting_incident_deletes_its_evidence():
             environment="test",
             severity="high",
         )
+
         db.add(incident)
         db.commit()
         db.refresh(incident)
@@ -633,8 +809,10 @@ def test_deleting_incident_deletes_its_evidence():
             source_type="log",
             content="Database connection timeout observed.",
         )
+
         db.add(evidence)
         db.commit()
+
         evidence_id = evidence.id
 
         db.delete(incident)
@@ -644,6 +822,10 @@ def test_deleting_incident_deletes_its_evidence():
 
         assert saved_evidence is None
 
+
+# =============================================================
+# Evidence API
+# =============================================================
 
 def test_create_incident_evidence():
     incident_response = client.post(
@@ -655,7 +837,9 @@ def test_create_incident_evidence():
             "severity": "high",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     response = client.post(
@@ -667,7 +851,9 @@ def test_create_incident_evidence():
     )
 
     assert response.status_code == 201
+
     body = response.json()
+
     assert body["incident_id"] == incident_id
     assert body["source_type"] == "log"
     assert body["content"] == (
@@ -686,6 +872,7 @@ def test_list_incident_evidence():
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     client.post(
@@ -695,6 +882,7 @@ def test_list_incident_evidence():
             "content": "Connection timeout.",
         },
     )
+
     client.post(
         f"/incidents/{incident_id}/evidence",
         json={
@@ -708,8 +896,11 @@ def test_list_incident_evidence():
     )
 
     assert response.status_code == 200
+
     body = response.json()
+
     assert len(body) == 2
+
     assert {item["source_type"] for item in body} == {
         "log",
         "metric",
@@ -746,6 +937,7 @@ def test_create_evidence_rejects_invalid_source_type():
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     response = client.post(
@@ -769,6 +961,7 @@ def test_create_evidence_rejects_empty_content():
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     response = client.post(
@@ -792,6 +985,7 @@ def test_filter_incident_evidence_by_source_type():
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     for source_type, content in [
@@ -806,6 +1000,7 @@ def test_filter_incident_evidence_by_source_type():
                 "content": content,
             },
         )
+
         assert response.status_code == 201
 
     response = client.get(
@@ -814,7 +1009,9 @@ def test_filter_incident_evidence_by_source_type():
     )
 
     assert response.status_code == 200
+
     body = response.json()
+
     assert len(body) == 2
     assert all(item["source_type"] == "log" for item in body)
 
@@ -829,6 +1026,7 @@ def test_incident_evidence_pagination():
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     for index in range(3):
@@ -839,12 +1037,14 @@ def test_incident_evidence_pagination():
                 "content": f"Log entry number {index}.",
             },
         )
+
         assert response.status_code == 201
 
     first_page = client.get(
         f"/incidents/{incident_id}/evidence",
         params={"limit": 2, "offset": 0},
     )
+
     second_page = client.get(
         f"/incidents/{incident_id}/evidence",
         params={"limit": 2, "offset": 2},
@@ -854,6 +1054,7 @@ def test_incident_evidence_pagination():
     assert second_page.status_code == 200
     assert len(first_page.json()) == 2
     assert len(second_page.json()) == 1
+
     assert (
         first_page.json()[0]["id"]
         != second_page.json()[0]["id"]
@@ -870,6 +1071,7 @@ def test_incident_evidence_rejects_invalid_pagination():
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     response = client.get(
@@ -879,6 +1081,10 @@ def test_incident_evidence_rejects_invalid_pagination():
 
     assert response.status_code == 422
 
+
+# =============================================================
+# Investigation context
+# =============================================================
 
 def test_investigation_context_includes_incident_and_evidence():
     incident_response = client.post(
@@ -890,7 +1096,9 @@ def test_investigation_context_includes_incident_and_evidence():
             "severity": "high",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     for source_type, content in [
@@ -906,6 +1114,7 @@ def test_investigation_context_includes_incident_and_evidence():
                 "content": content,
             },
         )
+
         assert response.status_code == 201
 
     response = client.get(
@@ -913,9 +1122,12 @@ def test_investigation_context_includes_incident_and_evidence():
     )
 
     assert response.status_code == 200
+
     body = response.json()
+
     assert body["incident"]["id"] == incident_id
     assert body["evidence_count"] == 4
+
     assert body["evidence_counts"] == {
         "log": 2,
         "metric": 1,
@@ -923,6 +1135,7 @@ def test_investigation_context_includes_incident_and_evidence():
         "deployment": 1,
         "note": 0,
     }
+
     assert len(body["evidence"]) == 4
 
 
@@ -936,6 +1149,7 @@ def test_investigation_context_with_no_evidence():
             "severity": "medium",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     response = client.get(
@@ -943,7 +1157,9 @@ def test_investigation_context_with_no_evidence():
     )
 
     assert response.status_code == 200
+
     body = response.json()
+
     assert body["evidence_count"] == 0
     assert body["evidence"] == []
     assert body["evidence_counts"]["log"] == 0
@@ -957,6 +1173,10 @@ def test_investigation_context_for_missing_incident():
     assert response.status_code == 404
 
 
+# =============================================================
+# Investigation reports
+# =============================================================
+
 def test_get_investigation_report(monkeypatch):
     from types import SimpleNamespace
 
@@ -969,7 +1189,9 @@ def test_get_investigation_report(monkeypatch):
             "severity": "high",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     evidence_response = client.post(
@@ -979,6 +1201,7 @@ def test_get_investigation_report(monkeypatch):
             "content": "ERROR database connection failed for request 123",
         },
     )
+
     assert evidence_response.status_code == 201
 
     class FakeRetriever:
@@ -1008,9 +1231,12 @@ def test_get_investigation_report(monkeypatch):
         FakeRetriever(),
     )
 
-    response = client.get(f"/incidents/{incident_id}/report")
+    response = client.get(
+        f"/incidents/{incident_id}/report"
+    )
 
     assert response.status_code == 200
+
     data = response.json()
 
     assert data["incident_id"] == incident_id
@@ -1020,6 +1246,7 @@ def test_get_investigation_report(monkeypatch):
     assert data["retrieved_evidence"][0]["source_type"] == "log"
     assert data["retrieved_evidence"][0]["chunk_index"] == 0
     assert data["retrieved_evidence"][0]["score"] == 0.92
+
     assert "database connection failed" in (
         data["retrieved_evidence"][0]["text"]
     )
@@ -1029,6 +1256,7 @@ def test_get_investigation_report(monkeypatch):
     assert isinstance(data["hypotheses"], list)
     assert isinstance(data["recommended_checks"], list)
     assert isinstance(data["evidence_gaps"], list)
+
 
 def test_get_investigation_report_without_evidence():
     incident_response = client.post(
@@ -1040,7 +1268,9 @@ def test_get_investigation_report_without_evidence():
             "severity": "medium",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     response = client.get(
@@ -1048,6 +1278,7 @@ def test_get_investigation_report_without_evidence():
     )
 
     assert response.status_code == 200
+
     body = response.json()
 
     assert body["evidence_count"] == 0
@@ -1063,6 +1294,9 @@ def test_get_investigation_report_for_missing_incident():
     assert response.status_code == 404
 
 
+# =============================================================
+# AI investigation endpoint
+# =============================================================
 
 def test_run_ai_investigation_endpoint(monkeypatch):
     from app.ai_models import (
@@ -1079,7 +1313,9 @@ def test_run_ai_investigation_endpoint(monkeypatch):
             "severity": "high",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     evidence_response = client.post(
@@ -1089,6 +1325,7 @@ def test_run_ai_investigation_endpoint(monkeypatch):
             "content": "ERROR database connection failed",
         },
     )
+
     assert evidence_response.status_code == 201
 
     evidence_id = evidence_response.json()["id"]
@@ -1114,12 +1351,15 @@ def test_run_ai_investigation_endpoint(monkeypatch):
         evidence_retriever,
     ):
         captured["incident_id"] = incident.id
+
         captured["evidence_ids"] = [
             item.id for item in evidence
         ]
+
         captured["evidence_contents"] = [
             item.content for item in evidence
         ]
+
         captured["evidence_retriever"] = evidence_retriever
 
         return expected_result
@@ -1134,24 +1374,28 @@ def test_run_ai_investigation_endpoint(monkeypatch):
     )
 
     assert response.status_code == 200
+
     data = response.json()
+
     assert data["observed_facts"][0]["evidence_ids"] == [
         evidence_id
     ]
+
     assert data["recommended_checks"] == [
         "Check database connectivity."
     ]
 
     assert captured["incident_id"] == incident_id
     assert captured["evidence_ids"] == [evidence_id]
+
     assert captured["evidence_contents"] == [
         "ERROR database connection failed"
     ]
+
     assert (
         captured["evidence_retriever"]
         is app.state.evidence_retriever
     )
-
 
 
 def test_run_ai_investigation_endpoint_missing_incident():
@@ -1160,12 +1404,10 @@ def test_run_ai_investigation_endpoint_missing_incident():
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Incident 999999 not found"
+    assert response.json()["detail"] == "Incident not found"
 
 
-def test_run_ai_investigation_endpoint_invalid_evidence(
-    monkeypatch,
-):
+def test_run_ai_investigation_endpoint_invalid_evidence(monkeypatch):
     incident_response = client.post(
         "/incidents",
         json={
@@ -1175,6 +1417,7 @@ def test_run_ai_investigation_endpoint_invalid_evidence(
             "severity": "medium",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     def fake_investigation(**kwargs):
@@ -1190,6 +1433,7 @@ def test_run_ai_investigation_endpoint_invalid_evidence(
     )
 
     assert response.status_code == 422
+
     assert response.json()["detail"] == (
         "AI investigation returned invalid evidence references"
     )
@@ -1207,7 +1451,9 @@ def test_run_ai_investigation_endpoint_handles_ollama_failure(
             "severity": "high",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     def fake_investigation(**kwargs):
@@ -1225,9 +1471,11 @@ def test_run_ai_investigation_endpoint_handles_ollama_failure(
     )
 
     assert response.status_code == 503
+
     assert response.json()["detail"] == (
         "AI investigation provider is unavailable"
     )
+
     assert "Internal connection details" not in response.text
 
 
@@ -1243,7 +1491,9 @@ def test_run_ai_investigation_endpoint_handles_unsupported_provider(
             "severity": "medium",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     def fake_investigation(**kwargs):
@@ -1261,9 +1511,11 @@ def test_run_ai_investigation_endpoint_handles_unsupported_provider(
     )
 
     assert response.status_code == 503
+
     assert response.json()["detail"] == (
         "AI investigation provider is not supported"
     )
+
     assert "secret-provider-name" not in response.text
 
 
@@ -1281,12 +1533,14 @@ def test_run_ai_investigation_endpoint_handles_exhausted_api_quota(
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     request = httpx2.Request(
         "POST",
         "https://api.openai.com/v1/responses",
     )
+
     response = httpx2.Response(
         status_code=429,
         request=request,
@@ -1324,12 +1578,16 @@ def test_run_ai_investigation_endpoint_handles_exhausted_api_quota(
     )
 
     assert result.status_code == 503
+
     assert result.json()["detail"] == (
         "AI investigation is unavailable because the OpenAI API "
         "account has no remaining credits. Check API billing."
     )
 
 
+# =============================================================
+# Investigation persistence and history
+# =============================================================
 
 def test_successful_investigation_is_persisted(monkeypatch):
     from app.ai_models import (
@@ -1346,7 +1604,9 @@ def test_successful_investigation_is_persisted(monkeypatch):
             "severity": "high",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     evidence_response = client.post(
@@ -1356,7 +1616,9 @@ def test_successful_investigation_is_persisted(monkeypatch):
             "content": "ERROR database connection failed",
         },
     )
+
     assert evidence_response.status_code == 201
+
     evidence_id = evidence_response.json()["id"]
 
     expected_result = AIInvestigationResult(
@@ -1381,11 +1643,14 @@ def test_successful_investigation_is_persisted(monkeypatch):
     assert response.status_code == 200
 
     with TestSessionLocal() as db:
-        saved = db.query(IncidentInvestigation).filter_by(
-            incident_id=incident_id
-        ).all()
+        saved = (
+            db.query(IncidentInvestigation)
+            .filter_by(incident_id=incident_id)
+            .all()
+        )
 
         assert len(saved) == 1
+
         assert saved[0].result == expected_result.model_dump(
             mode="json"
         )
@@ -1405,11 +1670,13 @@ def test_repeated_investigations_create_separate_history_records(
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     first_result = AIInvestigationResult(
         recommended_checks=["Check database connectivity."]
     )
+
     second_result = AIInvestigationResult(
         recommended_checks=["Inspect recent deployments."]
     )
@@ -1424,6 +1691,7 @@ def test_repeated_investigations_create_separate_history_records(
     first_response = client.post(
         f"/incidents/{incident_id}/investigate"
     )
+
     second_response = client.post(
         f"/incidents/{incident_id}/investigate"
     )
@@ -1440,9 +1708,11 @@ def test_repeated_investigations_create_separate_history_records(
         )
 
         assert len(saved) == 2
+
         assert saved[0].result["recommended_checks"] == [
             "Check database connectivity."
         ]
+
         assert saved[1].result["recommended_checks"] == [
             "Inspect recent deployments."
         ]
@@ -1458,6 +1728,7 @@ def test_failed_investigation_is_not_persisted(monkeypatch):
             "severity": "high",
         },
     )
+
     incident_id = incident_response.json()["id"]
 
     def fail_investigation(**kwargs):
@@ -1484,10 +1755,7 @@ def test_failed_investigation_is_not_persisted(monkeypatch):
         assert saved == []
 
 
-
 def test_deleting_incident_deletes_its_investigation_history():
-    from app.ai_models import AIInvestigationResult
-
     with TestSessionLocal() as db:
         incident = IncidentRecord(
             title="Incident deletion test",
@@ -1496,6 +1764,7 @@ def test_deleting_incident_deletes_its_investigation_history():
             environment="test",
             severity="high",
         )
+
         db.add(incident)
         db.commit()
         db.refresh(incident)
@@ -1506,10 +1775,10 @@ def test_deleting_incident_deletes_its_investigation_history():
                 recommended_checks=["Check database connectivity."]
             ).model_dump(mode="json"),
         )
+
         db.add(investigation)
         db.commit()
 
-        incident_id = incident.id
         investigation_id = investigation.id
 
         db.delete(incident)
@@ -1533,12 +1802,15 @@ def test_get_investigation_history_returns_newest_first():
             "severity": "high",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     first_result = AIInvestigationResult(
         recommended_checks=["Check database connectivity."]
     )
+
     second_result = AIInvestigationResult(
         recommended_checks=["Inspect recent deployments."]
     )
@@ -1548,6 +1820,7 @@ def test_get_investigation_history_returns_newest_first():
             incident_id=incident_id,
             result=first_result.model_dump(mode="json"),
         )
+
         second = IncidentInvestigation(
             incident_id=incident_id,
             result=second_result.model_dump(mode="json"),
@@ -1565,12 +1838,15 @@ def test_get_investigation_history_returns_newest_first():
     history = response.json()
 
     assert len(history) == 2
+
     assert history[0]["result"]["recommended_checks"] == [
         "Inspect recent deployments."
     ]
+
     assert history[1]["result"]["recommended_checks"] == [
         "Check database connectivity."
     ]
+
     assert history[0]["created_at"] is not None
     assert history[1]["created_at"] is not None
 
@@ -1585,7 +1861,9 @@ def test_get_investigation_history_returns_empty_list():
             "severity": "medium",
         },
     )
+
     assert incident_response.status_code == 201
+
     incident_id = incident_response.json()["id"]
 
     response = client.get(
@@ -1602,4 +1880,4 @@ def test_get_investigation_history_for_missing_incident():
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Incident 999999 not found"
+    assert response.json()["detail"] == "Incident not found"

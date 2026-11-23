@@ -1,9 +1,10 @@
-
 from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
+
 from app.ai_models import AIInvestigationResult
+
 
 class IncidentSeverity(str, Enum):
     LOW = "low"
@@ -17,6 +18,7 @@ class IncidentStatus(str, Enum):
     INVESTIGATING = "investigating"
     RESOLVED = "resolved"
 
+
 class IncidentEnvironment(str, Enum):
     PRODUCTION = "production"
     STAGING = "staging"
@@ -24,9 +26,12 @@ class IncidentEnvironment(str, Enum):
 
 
 class IncidentCreate(BaseModel):
+    project_id: int = Field(gt=0)
+
     title: str = Field(min_length=3, max_length=150)
     description: str = Field(min_length=5, max_length=2000)
     service: str = Field(min_length=2, max_length=100)
+
     environment: IncidentEnvironment | None = None
     severity: IncidentSeverity = IncidentSeverity.MEDIUM
 
@@ -67,6 +72,7 @@ class IncidentEvidenceResponse(BaseModel):
     content: str
     created_at: datetime
 
+
 class EvidenceCounts(BaseModel):
     log: int = 0
     metric: int = 0
@@ -97,12 +103,14 @@ class EvidenceAnalysisResponse(BaseModel):
     recurring_patterns: list[ErrorPatternResponse]
     findings: list[str]
 
+
 class RetrievedEvidenceResponse(BaseModel):
     evidence_id: int
     source_type: str
     chunk_index: int
     text: str
     score: float
+
 
 class InvestigationReportResponse(BaseModel):
     incident_id: int
@@ -111,21 +119,24 @@ class InvestigationReportResponse(BaseModel):
     severity: IncidentSeverity
     status: IncidentStatus
     evidence_count: int = Field(ge=0)
+
     retrieved_evidence: list[RetrievedEvidenceResponse] = Field(
         default_factory=list
     )
 
-    # Facts supported by the collected evidence
+    # Findings directly supported by collected evidence.
     observed_findings: list[str]
+
+    # Repeated patterns detected in the evidence.
     recurring_patterns: list[ErrorPatternResponse]
 
-    # Possible explanations, not confirmed root causes
+    # Possible explanations, not confirmed root causes.
     hypotheses: list[str]
 
-    # Actions an engineer can take to investigate
+    # Actions an engineer can take to investigate.
     recommended_checks: list[str]
 
-    # Missing information that limits the investigation
+    # Missing information that limits the investigation.
     evidence_gaps: list[str]
 
 

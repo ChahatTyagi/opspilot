@@ -11,11 +11,16 @@ from app.identity_models import (
     Organization,
     OrganizationMembership,
     Project,
+    ProjectMembership,
     User,
     UserSession,
 )
 from app.main import app
 from app.security import hash_token
+from app.workspace_routes import (
+    _build_workspace_responses,
+    _get_member_workspace_row,
+)
 
 
 @pytest.fixture
@@ -630,3 +635,173 @@ def test_select_current_workspace_rejects_invalid_workspace_id(
     )
 
     assert response.status_code == 422
+
+
+
+def test_personal_workspace_collaborator_sees_only_shared_projects(
+    workspace_client,
+):
+    client, session_factory = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    db = session_factory()
+
+    try:
+        owner = db.scalar(
+            select(User).where(
+                User.email == "developer@example.com"
+            )
+        )
+        assert owner is not None
+
+        workspace = db.scalar(
+            select(Organization).where(
+                Organization.id == registration.json()["workspace_id"]
+            )
+        )
+        assert workspace is not None
+
+        private_project = db.scalar(
+            select(Project).where(
+                Project.id == registration.json()["project_id"]
+            )
+        )
+        assert private_project is not None
+
+        shared_project = Project(
+            organization_id=workspace.id,
+            name="Shared Project",
+            slug="shared-project",
+            description="A project shared with a collaborator",
+            created_by_user_id=owner.id,
+            is_active=True,
+        )
+
+        collaborator = User(
+            email="collaborator@example.com",
+            display_name="Project Collaborator",
+            password_hash="test-password-hash",
+        )
+
+        db.add_all([shared_project, collaborator])
+        db.flush()
+
+        db.add_all(
+            [
+                OrganizationMembership(
+                    organization_id=workspace.id,
+                    user_id=collaborator.id,
+                    role="developer",
+                ),
+                ProjectMembership(
+                    project_id=shared_project.id,
+                    user_id=collaborator.id,
+                    role="developer",
+                    created_by_user_id=owner.id,
+                ),
+            ]
+        )
+
+        db.commit()
+
+        workspace_row = _get_member_workspace_row(
+            db,
+            collaborator.id,
+            workspace.id,
+        )
+
+        assert workspace_row is not None
+
+        response = _build_workspace_responses(
+            db,
+            [workspace_row],
+            collaborator.id,
+        )
+
+        assert len(response) == 1
+
+        visible_projects = response[0].projects
+
+        assert len(visible_projects) == 1
+        assert visible_projects[0].id == shared_project.id
+        assert visible_projects[0].name == "Shared Project"
+
+        assert all(
+            project.id != private_project.id
+            for project in visible_projects
+        )
+
+    finally:
+        db.close()
+
+
+def test_personal_workspace_owner_sees_all_projects(
+    workspace_client,
+):
+    client, session_factory = workspace_client
+
+    registration = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert registration.status_code == 201
+
+    db = session_factory()
+
+    try:
+        owner = db.scalar(
+            select(User).where(
+                User.email == "developer@example.com"
+            )
+        )
+        assert owner is not None
+
+        workspace_id = registration.json()["workspace_id"]
+
+        second_project = Project(
+            organization_id=workspace_id,
+            name="Another Private Project",
+            slug="another-private-project",
+            description="A second project owned by the workspace owner",
+            created_by_user_id=owner.id,
+            is_active=True,
+        )
+
+        db.add(second_project)
+        db.commit()
+
+        workspace_row = _get_member_workspace_row(
+            db,
+            owner.id,
+            workspace_id,
+        )
+
+        assert workspace_row is not None
+
+        response = _build_workspace_responses(
+            db,
+            [workspace_row],
+            owner.id,
+        )
+
+        assert len(response) == 1
+
+        visible_project_names = {
+            project.name
+            for project in response[0].projects
+        }
+
+        assert visible_project_names == {
+            "My First Project",
+            "Another Private Project",
+        }
+
+    finally:
+        db.close()

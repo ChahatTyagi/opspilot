@@ -1,4 +1,3 @@
-
 import logging
 import re
 import time
@@ -14,7 +13,13 @@ from sqlalchemy.orm import Session
 
 from app.ai_models import AIInvestigationResult
 from app.analyzer import analyze_evidence
-from app.auth_routes import router as auth_router
+from app.auth_routes import get_current_user, router as auth_router
+from app.api_key_routes import router as api_key_router
+from app.authorization import (
+    get_accessible_project_ids,
+    require_project_access,
+    require_project_permission,
+)
 from app.config import get_allowed_origins
 from app.database import get_db
 from app.db_models import (
@@ -22,6 +27,7 @@ from app.db_models import (
     IncidentInvestigation,
     IncidentRecord,
 )
+from app.identity_models import User
 from app.investigation_service import (
     UnsupportedLLMProviderError,
     run_ai_investigation,
@@ -51,11 +57,13 @@ from app.workspace_routes import router as workspace_router
 
 logger = logging.getLogger(__name__)
 
+
 app = FastAPI(
     title="OpsPilot",
     description="Evidence-driven AI incident investigation",
     version="0.2.0",
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,12 +73,76 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 app.state.evidence_retriever = EvidenceRetriever()
 
 app.include_router(telemetry_router)
 app.include_router(auth_router)
 app.include_router(workspace_router)
+app.include_router(api_key_router)
 
+
+# -------------------------------------------------------------------
+# Shared authorization helper
+# -------------------------------------------------------------------
+
+def _get_authorized_incident(
+    db: Session,
+    incident_id: int,
+    current_user: User,
+    permission: str = "read",
+) -> IncidentRecord:
+    """
+    Fetch an incident only if the current user can access its project.
+
+    Incidents without a project_id are intentionally inaccessible
+    through these authenticated project-scoped routes.
+    """
+
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None or incident.project_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    if permission == "read":
+        require_project_access(
+            db=db,
+            user_id=current_user.id,
+            project_id=incident.project_id,
+        )
+    else:
+        require_project_permission(
+            db=db,
+            user_id=current_user.id,
+            project_id=incident.project_id,
+            permission=permission,
+        )
+
+    return incident
+
+
+def _get_incident_evidence(
+    db: Session,
+    incident_id: int,
+) -> list[IncidentEvidence]:
+    statement = (
+        select(IncidentEvidence)
+        .where(IncidentEvidence.incident_id == incident_id)
+        .order_by(
+            IncidentEvidence.created_at,
+            IncidentEvidence.id,
+        )
+    )
+
+    return list(db.scalars(statement).all())
+
+
+# -------------------------------------------------------------------
+# Request logging and error handling
+# -------------------------------------------------------------------
 
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
@@ -97,7 +169,10 @@ async def request_logging_middleware(request: Request, call_next):
         )
         raise
 
-    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    duration_ms = round(
+        (time.perf_counter() - start_time) * 1000,
+        2,
+    )
 
     response.headers["X-Request-ID"] = request_id
 
@@ -131,7 +206,7 @@ async def global_exception_handler(
     )
 
     response = JSONResponse(
-        status_code=500,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "An unexpected error occurred"},
     )
 
@@ -140,6 +215,10 @@ async def global_exception_handler(
 
     return response
 
+
+# -------------------------------------------------------------------
+# Health endpoints
+# -------------------------------------------------------------------
 
 @app.get("/health")
 def health_check():
@@ -151,11 +230,14 @@ def health_check():
 
 
 @app.get("/ready")
-def readiness_check(db: Session = Depends(get_db)):
+def readiness_check(
+    db: Session = Depends(get_db),
+):
     try:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError:
         logger.exception("Database readiness check failed")
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database is unavailable",
@@ -167,6 +249,10 @@ def readiness_check(db: Session = Depends(get_db)):
     }
 
 
+# -------------------------------------------------------------------
+# Incident creation and listing
+# -------------------------------------------------------------------
+
 @app.post(
     "/incidents",
     response_model=Incident,
@@ -174,9 +260,19 @@ def readiness_check(db: Session = Depends(get_db)):
 )
 def create_incident(
     incident_data: IncidentCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # A user must have write permission on the requested project.
+    require_project_permission(
+        db=db,
+        user_id=current_user.id,
+        project_id=incident_data.project_id,
+        permission="write",
+    )
+
     incident = IncidentRecord(
+        project_id=incident_data.project_id,
         title=incident_data.title,
         description=incident_data.description,
         service=incident_data.service,
@@ -192,9 +288,14 @@ def create_incident(
         db.add(incident)
         db.commit()
         db.refresh(incident)
+
     except SQLAlchemyError:
         db.rollback()
-        logger.exception("Database error while creating incident")
+
+        logger.exception(
+            "Database error while creating incident"
+        )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to create incident due to a database error",
@@ -203,7 +304,10 @@ def create_incident(
     return incident
 
 
-@app.get("/incidents", response_model=list[Incident])
+@app.get(
+    "/incidents",
+    response_model=list[Incident],
+)
 def list_incidents(
     severity: IncidentSeverity | None = None,
     status_filter: IncidentStatus | None = None,
@@ -211,9 +315,21 @@ def list_incidents(
     environment: IncidentEnvironment | None = None,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    statement = select(IncidentRecord)
+    accessible_project_ids = get_accessible_project_ids(
+        db=db,
+        user_id=current_user.id,
+    )
+
+    # Do not return incidents that have no accessible project.
+    if not accessible_project_ids:
+        return []
+
+    statement = select(IncidentRecord).where(
+        IncidentRecord.project_id.in_(accessible_project_ids)
+    )
 
     if severity is not None:
         statement = statement.where(
@@ -242,50 +358,61 @@ def list_incidents(
         .offset(offset)
     )
 
-    return db.scalars(statement).all()
+    return list(db.scalars(statement).all())
 
 
-@app.get("/incidents/{incident_id}", response_model=Incident)
+# -------------------------------------------------------------------
+# Read and update individual incidents
+# -------------------------------------------------------------------
+
+@app.get(
+    "/incidents/{incident_id}",
+    response_model=Incident,
+)
 def get_incident(
     incident_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident {incident_id} not found",
-        )
-
-    return incident
+    return _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="read",
+    )
 
 
-@app.patch("/incidents/{incident_id}", response_model=Incident)
+@app.patch(
+    "/incidents/{incident_id}",
+    response_model=Incident,
+)
 def update_incident(
     incident_id: int,
     incident_data: IncidentUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident {incident_id} not found",
-        )
+    incident = _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="write",
+    )
 
     incident.status = incident_data.status.value
 
     try:
         db.commit()
         db.refresh(incident)
+
     except SQLAlchemyError:
         db.rollback()
+
         logger.exception(
             "Database error while updating incident %s",
             incident_id,
         )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to update incident due to a database error",
@@ -293,6 +420,10 @@ def update_incident(
 
     return incident
 
+
+# -------------------------------------------------------------------
+# Incident evidence
+# -------------------------------------------------------------------
 
 @app.post(
     "/incidents/{incident_id}/evidence",
@@ -302,15 +433,15 @@ def update_incident(
 def create_incident_evidence(
     incident_id: int,
     evidence_data: IncidentEvidenceCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Incident not found",
-        )
+    _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="write",
+    )
 
     evidence = IncidentEvidence(
         incident_id=incident_id,
@@ -322,13 +453,17 @@ def create_incident_evidence(
         db.add(evidence)
         db.commit()
         db.refresh(evidence)
+
         return evidence
+
     except SQLAlchemyError as exc:
         db.rollback()
+
         logger.exception(
             "Failed to create incident evidence for incident %s",
             incident_id,
         )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save incident evidence",
@@ -344,15 +479,15 @@ def list_incident_evidence(
     source_type: EvidenceSourceType | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Incident not found",
-        )
+    _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="read",
+    )
 
     statement = select(IncidentEvidence).where(
         IncidentEvidence.incident_id == incident_id
@@ -376,31 +511,30 @@ def list_incident_evidence(
     return list(db.scalars(statement).all())
 
 
+# -------------------------------------------------------------------
+# Investigation context
+# -------------------------------------------------------------------
+
 @app.get(
     "/incidents/{incident_id}/investigation-context",
     response_model=InvestigationContext,
 )
 def get_investigation_context(
     incident_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident {incident_id} not found",
-        )
-
-    statement = (
-        select(IncidentEvidence)
-        .where(IncidentEvidence.incident_id == incident_id)
-        .order_by(
-            IncidentEvidence.created_at,
-            IncidentEvidence.id,
-        )
+    incident = _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="read",
     )
-    evidence = list(db.scalars(statement).all())
+
+    evidence = _get_incident_evidence(
+        db=db,
+        incident_id=incident_id,
+    )
 
     counts = EvidenceCounts()
 
@@ -419,6 +553,10 @@ def get_investigation_context(
     )
 
 
+# -------------------------------------------------------------------
+# AI investigation
+# -------------------------------------------------------------------
+
 @app.post(
     "/incidents/{incident_id}/investigate",
     response_model=AIInvestigationResult,
@@ -426,25 +564,20 @@ def get_investigation_context(
 def investigate_incident(
     incident_id: int,
     request: Request,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident {incident_id} not found",
-        )
-
-    statement = (
-        select(IncidentEvidence)
-        .where(IncidentEvidence.incident_id == incident_id)
-        .order_by(
-            IncidentEvidence.created_at,
-            IncidentEvidence.id,
-        )
+    incident = _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="write",
     )
-    evidence = list(db.scalars(statement).all())
+
+    evidence = _get_incident_evidence(
+        db=db,
+        incident_id=incident_id,
+    )
 
     try:
         result = run_ai_investigation(
@@ -467,11 +600,13 @@ def investigate_incident(
         db.rollback()
 
         error_body = exc.body
+
         error_details = (
             error_body.get("error", {})
             if isinstance(error_body, dict)
             else {}
         )
+
         error_code = error_details.get("code")
 
         if error_code == "insufficient_quota":
@@ -492,6 +627,7 @@ def investigate_incident(
 
     except LLMConfigurationError:
         db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI investigation is not configured",
@@ -512,6 +648,7 @@ def investigate_incident(
 
     except UnsupportedLLMProviderError as exc:
         db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI investigation provider is not supported",
@@ -519,6 +656,7 @@ def investigate_incident(
 
     except ValueError:
         db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="AI investigation returned invalid evidence references",
@@ -526,15 +664,21 @@ def investigate_incident(
 
     except SQLAlchemyError as exc:
         db.rollback()
+
         logger.exception(
             "Unable to save AI investigation for incident %s",
             incident_id,
         )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to save AI investigation due to a database error",
         ) from exc
 
+
+# -------------------------------------------------------------------
+# Investigation history
+# -------------------------------------------------------------------
 
 @app.get(
     "/incidents/{incident_id}/investigations",
@@ -542,19 +686,21 @@ def investigate_incident(
 )
 def get_investigation_history(
     incident_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident {incident_id} not found",
-        )
+    _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="read",
+    )
 
     statement = (
         select(IncidentInvestigation)
-        .where(IncidentInvestigation.incident_id == incident_id)
+        .where(
+            IncidentInvestigation.incident_id == incident_id
+        )
         .order_by(
             IncidentInvestigation.created_at.desc(),
             IncidentInvestigation.id.desc(),
@@ -564,35 +710,40 @@ def get_investigation_history(
     return list(db.scalars(statement).all())
 
 
+# -------------------------------------------------------------------
+# Evidence analysis
+# -------------------------------------------------------------------
+
 @app.get(
     "/incidents/{incident_id}/analyze",
     response_model=EvidenceAnalysisResponse,
 )
 def analyze_incident(
     incident_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident {incident_id} not found",
-        )
-
-    statement = (
-        select(IncidentEvidence)
-        .where(IncidentEvidence.incident_id == incident_id)
-        .order_by(
-            IncidentEvidence.created_at,
-            IncidentEvidence.id,
-        )
+    _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="read",
     )
 
-    evidence = list(db.scalars(statement).all())
+    evidence = _get_incident_evidence(
+        db=db,
+        incident_id=incident_id,
+    )
 
-    return analyze_evidence(incident_id, evidence)
+    return analyze_evidence(
+        incident_id,
+        evidence,
+    )
 
+
+# -------------------------------------------------------------------
+# Investigation report
+# -------------------------------------------------------------------
 
 @app.get(
     "/incidents/{incident_id}/report",
@@ -601,25 +752,20 @@ def analyze_incident(
 def get_investigation_report(
     incident_id: int,
     request: Request,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.get(IncidentRecord, incident_id)
-
-    if incident is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident {incident_id} not found",
-        )
-
-    statement = (
-        select(IncidentEvidence)
-        .where(IncidentEvidence.incident_id == incident_id)
-        .order_by(
-            IncidentEvidence.created_at,
-            IncidentEvidence.id,
-        )
+    incident = _get_authorized_incident(
+        db=db,
+        incident_id=incident_id,
+        current_user=current_user,
+        permission="read",
     )
-    evidence = list(db.scalars(statement).all())
+
+    evidence = _get_incident_evidence(
+        db=db,
+        incident_id=incident_id,
+    )
 
     return build_investigation_report(
         incident,

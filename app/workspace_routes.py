@@ -12,6 +12,7 @@ from app.identity_models import (
     Organization,
     OrganizationMembership,
     Project,
+    ProjectMembership,
     User,
     UserSession,
 )
@@ -33,12 +34,21 @@ router = APIRouter(
 def _build_workspace_responses(
     db: Session,
     workspace_rows,
+    user_id: int,
 ) -> list[WorkspaceResponse]:
     """
-    Convert authorized workspace and membership rows into API responses.
+    Build workspace responses while enforcing project visibility.
 
-    Projects are fetched in one query for all returned workspaces,
-    avoiding a separate database query for every workspace.
+    Organization workspaces:
+        Every workspace member can see all projects.
+
+    Personal workspaces:
+        The workspace owner can see all projects.
+        Other members can see only projects explicitly shared
+        through ProjectMembership.
+
+    Project visibility is checked here so every endpoint using
+    this helper follows the same rules.
     """
 
     if not workspace_rows:
@@ -55,6 +65,31 @@ def _build_workspace_responses(
         .order_by(Project.created_at, Project.id)
     ).all()
 
+    if not projects:
+        return [
+            WorkspaceResponse(
+                id=workspace.id,
+                name=workspace.name,
+                slug=workspace.slug,
+                workspace_type=workspace.workspace_type,
+                role=role,
+                created_at=workspace.created_at,
+                projects=[],
+            )
+            for workspace, role in workspace_rows
+        ]
+
+    project_ids = [project.id for project in projects]
+
+    shared_project_ids = set(
+        db.scalars(
+            select(ProjectMembership.project_id).where(
+                ProjectMembership.user_id == user_id,
+                ProjectMembership.project_id.in_(project_ids),
+            )
+        ).all()
+    )
+
     projects_by_workspace: dict[int, list[Project]] = {
         workspace_id: []
         for workspace_id in workspace_ids
@@ -66,9 +101,21 @@ def _build_workspace_responses(
     responses = []
 
     for workspace, role in workspace_rows:
-        workspace_projects = [
+        workspace_projects = projects_by_workspace[workspace.id]
+
+        if workspace.workspace_type == "personal":
+            is_workspace_owner = workspace.created_by_user_id == user_id
+
+            if not is_workspace_owner:
+                workspace_projects = [
+                    project
+                    for project in workspace_projects
+                    if project.id in shared_project_ids
+                ]
+
+        project_responses = [
             WorkspaceProjectResponse.model_validate(project)
-            for project in projects_by_workspace[workspace.id]
+            for project in workspace_projects
         ]
 
         responses.append(
@@ -79,7 +126,7 @@ def _build_workspace_responses(
                 workspace_type=workspace.workspace_type,
                 role=role,
                 created_at=workspace.created_at,
-                projects=workspace_projects,
+                projects=project_responses,
             )
         )
 
@@ -146,6 +193,7 @@ def get_current_workspace(
     workspace = _build_workspace_responses(
         db,
         [workspace_row],
+        current_user.id,
     )[0]
 
     return CurrentWorkspaceResponse(workspace=workspace)
@@ -199,6 +247,7 @@ def select_current_workspace(
     workspace = _build_workspace_responses(
         db,
         [workspace_row],
+        current_user.id,
     )[0]
 
     return CurrentWorkspaceResponse(workspace=workspace)
@@ -214,6 +263,9 @@ def list_workspaces(
 ):
     """
     Return only workspaces where the authenticated user is a member.
+
+    Project visibility is additionally restricted according to
+    personal-workspace ownership or explicit project membership.
     """
 
     statement = (
@@ -239,6 +291,7 @@ def list_workspaces(
     workspaces = _build_workspace_responses(
         db,
         workspace_rows,
+        current_user.id,
     )
 
     return WorkspaceListResponse(
@@ -278,6 +331,7 @@ def get_workspace(
     responses = _build_workspace_responses(
         db,
         [workspace_row],
+        current_user.id,
     )
 
     return responses[0]
