@@ -4,13 +4,20 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event, select
+from sqlalchemy import create_engine, event, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import db_models, identity_models
+from app import auth_routes, db_models, identity_models
 from app.database import Base, get_db
-from app.identity_models import User, UserSession
+from app.identity_models import (
+    Organization,
+    OrganizationMembership,
+    Project,
+    User,
+    UserSession,
+)
 from app.main import app
 from app.security import hash_token
 
@@ -69,10 +76,14 @@ def registration_payload():
         "email": "developer@example.com",
         "display_name": "OpsPilot Developer",
         "password": "Correct-Horse-Battery-123!",
+        "account_type": "personal",
+        "project_name": "My First Project",
     }
 
 
-def test_register_creates_user_and_session(auth_client):
+def test_register_creates_personal_workspace_project_and_session(
+    auth_client,
+):
     client, session_factory = auth_client
 
     response = client.post(
@@ -81,8 +92,16 @@ def test_register_creates_user_and_session(auth_client):
     )
 
     assert response.status_code == 201
-    assert response.json()["email"] == "developer@example.com"
-    assert response.json()["display_name"] == "OpsPilot Developer"
+
+    response_data = response.json()
+
+    assert response_data["email"] == "developer@example.com"
+    assert response_data["display_name"] == "OpsPilot Developer"
+    assert response_data["workspace_type"] == "personal"
+    assert response_data["workspace_name"] == "OpsPilot Developer's Workspace"
+    assert response_data["membership_role"] == "org_admin"
+    assert response_data["project_name"] == "My First Project"
+    assert response_data["project_slug"].startswith("my-first-project-")
 
     assert client.cookies.get("opspilot_session")
     assert client.cookies.get("opspilot_csrf")
@@ -99,6 +118,33 @@ def test_register_creates_user_and_session(auth_client):
         assert user.password_hash != registration_payload()["password"]
         assert user.password_hash.startswith("$argon2id$")
 
+        workspace = db.get(
+            Organization,
+            response_data["workspace_id"],
+        )
+
+        assert workspace is not None
+        assert workspace.workspace_type == "personal"
+
+        membership = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == workspace.id,
+                OrganizationMembership.user_id == user.id,
+            )
+        )
+
+        assert membership is not None
+        assert membership.role == "org_admin"
+
+        project = db.get(
+            Project,
+            response_data["project_id"],
+        )
+
+        assert project is not None
+        assert project.organization_id == workspace.id
+        assert project.created_by_user_id == user.id
+
         session_record = db.scalar(
             select(UserSession).where(
                 UserSession.user_id == user.id
@@ -113,6 +159,167 @@ def test_register_creates_user_and_session(auth_client):
             raw_session_token
         )
         assert session_record.token_hash != raw_session_token
+
+    finally:
+        db.close()
+
+
+def test_register_creates_organization_workspace(auth_client):
+    client, session_factory = auth_client
+
+    payload = registration_payload()
+    payload.update(
+        {
+            "account_type": "organization",
+            "organization_name": "Acme Engineering",
+            "project_name": "Payments Service",
+        }
+    )
+
+    response = client.post(
+        "/auth/register",
+        json=payload,
+    )
+
+    assert response.status_code == 201
+
+    response_data = response.json()
+
+    assert response_data["workspace_type"] == "organization"
+    assert response_data["workspace_name"] == "Acme Engineering"
+    assert response_data["project_name"] == "Payments Service"
+    assert response_data["project_slug"].startswith("payments-service-")
+
+    db = session_factory()
+    try:
+        workspace = db.get(
+            Organization,
+            response_data["workspace_id"],
+        )
+
+        assert workspace is not None
+        assert workspace.workspace_type == "organization"
+        assert workspace.name == "Acme Engineering"
+
+        membership = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == workspace.id
+            )
+        )
+
+        assert membership is not None
+        assert membership.role == "org_admin"
+
+        project = db.get(
+            Project,
+            response_data["project_id"],
+        )
+
+        assert project is not None
+        assert project.name == "Payments Service"
+        assert project.organization_id == workspace.id
+
+    finally:
+        db.close()
+
+
+def test_register_requires_organization_name_for_organization_account(
+    auth_client,
+):
+    client, _ = auth_client
+
+    payload = registration_payload()
+    payload["account_type"] = "organization"
+
+    response = client.post(
+        "/auth/register",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_rejects_organization_name_for_personal_account(
+    auth_client,
+):
+    client, _ = auth_client
+
+    payload = registration_payload()
+    payload["organization_name"] = "Unexpected Organization"
+
+    response = client.post(
+        "/auth/register",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_rejects_invalid_account_type(auth_client):
+    client, _ = auth_client
+
+    payload = registration_payload()
+    payload["account_type"] = "team"
+
+    response = client.post(
+        "/auth/register",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_rejects_empty_project_name(auth_client):
+    client, _ = auth_client
+
+    payload = registration_payload()
+    payload["project_name"] = "   "
+
+    response = client.post(
+        "/auth/register",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+
+
+def test_registration_rolls_back_all_records_if_session_creation_fails(
+    auth_client,
+    monkeypatch,
+):
+    client, session_factory = auth_client
+
+    def fail_session_creation(db, user, request):
+        raise SQLAlchemyError("Simulated session creation failure")
+
+    monkeypatch.setattr(
+        auth_routes,
+        "_create_session",
+        fail_session_creation,
+    )
+
+    response = client.post(
+        "/auth/register",
+        json=registration_payload(),
+    )
+
+    assert response.status_code == 500
+
+    db = session_factory()
+    try:
+        assert db.scalar(select(func.count()).select_from(User)) == 0
+        assert (
+            db.scalar(select(func.count()).select_from(Organization)) == 0
+        )
+        assert (
+            db.scalar(
+                select(func.count()).select_from(OrganizationMembership)
+            )
+            == 0
+        )
+        assert db.scalar(select(func.count()).select_from(Project)) == 0
+        assert db.scalar(select(func.count()).select_from(UserSession)) == 0
+
     finally:
         db.close()
 

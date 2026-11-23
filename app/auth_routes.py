@@ -1,6 +1,9 @@
 
 import hmac
 import os
+import re
+import secrets
+import unicodedata
 
 from datetime import datetime, timedelta, timezone
 
@@ -19,10 +22,17 @@ from sqlalchemy.orm import Session
 from app.auth_models import (
     LoginRequest,
     RegisterRequest,
+    RegistrationResponse,
     UserResponse,
 )
 from app.database import get_db
-from app.identity_models import User, UserSession
+from app.identity_models import (
+    Organization,
+    OrganizationMembership,
+    Project,
+    User,
+    UserSession,
+)
 from app.security import (
     generate_csrf_token,
     generate_session_token,
@@ -141,9 +151,132 @@ def _get_user_response(user: User) -> UserResponse:
     )
 
 
+def _slugify(value: str) -> str:
+    """
+    Convert a human-readable name into a URL-friendly slug.
+    """
+
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    slug = ascii_value.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = slug.strip("-")
+
+    return slug or "workspace"
+
+
+def _unique_organization_slug(
+    db: Session,
+    name: str,
+) -> str:
+    """
+    Generate a globally unique organization/workspace slug.
+    """
+
+    base_slug = _slugify(name)[:85].strip("-") or "workspace"
+
+    for _ in range(5):
+        candidate = f"{base_slug}-{secrets.token_hex(4)}"
+
+        existing = db.scalar(
+            select(Organization.id).where(
+                Organization.slug == candidate
+            )
+        )
+
+        if existing is None:
+            return candidate
+
+    raise RuntimeError("Unable to generate a unique workspace slug")
+
+
+def _unique_project_slug(
+    db: Session,
+    organization_id: int,
+    name: str,
+) -> str:
+    """
+    Generate a project slug unique inside its workspace.
+    """
+
+    base_slug = _slugify(name)[:85].strip("-") or "project"
+
+    for _ in range(5):
+        candidate = f"{base_slug}-{secrets.token_hex(4)}"
+
+        existing = db.scalar(
+            select(Project.id).where(
+                Project.organization_id == organization_id,
+                Project.slug == candidate,
+            )
+        )
+
+        if existing is None:
+            return candidate
+
+    raise RuntimeError("Unable to generate a unique project slug")
+
+
+def _create_workspace_and_project(
+    db: Session,
+    user: User,
+    payload: RegisterRequest,
+) -> tuple[Organization, Project]:
+    """
+    Create a workspace, owner membership, and initial project.
+
+    The caller owns the transaction. This function deliberately does
+    not commit so that registration remains atomic.
+    """
+
+    if payload.account_type == "personal":
+        workspace_name = f"{user.display_name}'s Workspace"
+        workspace_type = "personal"
+    else:
+        # Pydantic validation guarantees this is present.
+        workspace_name = payload.organization_name
+        workspace_type = "organization"
+
+    organization = Organization(
+        name=workspace_name[:150],
+        slug=_unique_organization_slug(db, workspace_name),
+        workspace_type=workspace_type,
+        created_by_user_id=user.id,
+    )
+
+    db.add(organization)
+    db.flush()
+
+    membership = OrganizationMembership(
+        organization_id=organization.id,
+        user_id=user.id,
+        role="org_admin",
+    )
+
+    db.add(membership)
+
+    project = Project(
+        organization_id=organization.id,
+        name=payload.project_name,
+        slug=_unique_project_slug(
+            db,
+            organization.id,
+            payload.project_name,
+        ),
+        description="Initial project",
+        created_by_user_id=user.id,
+        is_active=True,
+    )
+
+    db.add(project)
+    db.flush()
+
+    return organization, project
+
+
 @router.post(
     "/register",
-    response_model=UserResponse,
+    response_model=RegistrationResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def register(
@@ -174,20 +307,30 @@ def register(
         db.add(user)
         db.flush()
 
+        organization, project = _create_workspace_and_project(
+            db,
+            user,
+            payload,
+        )
+
         session_token, csrf_token = _create_session(
             db,
             user,
             request,
         )
 
+        # One commit for user, workspace, membership, project, and session.
         db.commit()
+
         db.refresh(user)
+        db.refresh(organization)
+        db.refresh(project)
 
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
+            detail="Unable to create account because a conflicting record exists",
         )
 
     except SQLAlchemyError:
@@ -197,13 +340,29 @@ def register(
             detail="Unable to create account",
         )
 
+    except Exception:
+        db.rollback()
+        raise
+
     _set_auth_cookies(
         response,
         session_token,
         csrf_token,
     )
 
-    return _get_user_response(user)
+    return RegistrationResponse(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        created_at=user.created_at,
+        workspace_id=organization.id,
+        workspace_name=organization.name,
+        workspace_type=organization.workspace_type,
+        membership_role="org_admin",
+        project_id=project.id,
+        project_name=project.name,
+        project_slug=project.slug,
+    )
 
 
 @router.post(
