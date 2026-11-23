@@ -1,35 +1,58 @@
+
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app import identity_models  # noqa: F401
 
 
 class IncidentRecord(Base):
     __tablename__ = "incidents"
 
     id: Mapped[int] = mapped_column(
-    Integer, primary_key=True)
+        Integer,
+        primary_key=True,
+    )
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(
-        String(150), nullable=False
+        String(150),
+        nullable=False,
     )
     description: Mapped[str] = mapped_column(
-        Text, nullable=False
+        Text,
+        nullable=False,
     )
     service: Mapped[str] = mapped_column(
-        String(100), nullable=False
+        String(100),
+        nullable=False,
     )
     environment: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
     )
     severity: Mapped[str] = mapped_column(
-        String(20), nullable=False
+        String(20),
+        nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        String(20), default="open", nullable=False
+        String(20),
+        default="open",
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -37,11 +60,13 @@ class IncidentRecord(Base):
         nullable=False,
     )
 
+
 class IncidentEvidence(Base):
     __tablename__ = "incident_evidence"
 
     id: Mapped[int] = mapped_column(
-        Integer, primary_key=True
+        Integer,
+        primary_key=True,
     )
     incident_id: Mapped[int] = mapped_column(
         ForeignKey("incidents.id", ondelete="CASCADE"),
@@ -49,10 +74,12 @@ class IncidentEvidence(Base):
         index=True,
     )
     source_type: Mapped[str] = mapped_column(
-        String(30), nullable=False
+        String(30),
+        nullable=False,
     )
     content: Mapped[str] = mapped_column(
-        Text, nullable=False
+        Text,
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -68,18 +95,15 @@ class IncidentInvestigation(Base):
         Integer,
         primary_key=True,
     )
-
     incident_id: Mapped[int] = mapped_column(
         ForeignKey("incidents.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-
     result: Mapped[dict[str, Any]] = mapped_column(
         JSON,
         nullable=False,
     )
-
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
