@@ -1,10 +1,10 @@
-
 import hashlib
 import hmac
 import json
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -27,11 +27,13 @@ from app.db_models import (
     IncidentRecord,
     TelemetryRecord,
 )
-from app.identity_models import Project, User
+from app.identity_models import User
 from app.telemetry import (
     MAX_TOPOLOGY_SPANS,
     TelemetryPayloadError,
     build_service_topology,
+    parse_otlp_logs,
+    parse_otlp_metrics,
     parse_otlp_traces,
 )
 
@@ -44,6 +46,10 @@ MAX_OTLP_BODY_BYTES = 2 * 1024 * 1024
 OTLP_CONTENT_TYPE = "application/x-protobuf"
 
 
+# ============================================================
+# SHARED OTLP REQUEST VALIDATION
+# ============================================================
+
 def _verify_otlp_api_key(provided_key: str | None) -> None:
     """
     Verify the legacy global OTLP API key.
@@ -51,6 +57,7 @@ def _verify_otlp_api_key(provided_key: str | None) -> None:
     Kept temporarily for backward compatibility with the old
     incident-specific ingestion endpoint.
     """
+
     expected_key = os.getenv("OPSPILOT_OTLP_API_KEY", "")
 
     if not expected_key:
@@ -102,6 +109,8 @@ async def _read_limited_body(request: Request) -> bytes:
 
 
 def _validate_otlp_content_type(request: Request) -> None:
+    """Require the OTLP protobuf content type."""
+
     content_type = (
         request.headers.get("content-type", "")
         .split(";", 1)[0]
@@ -115,6 +124,10 @@ def _validate_otlp_content_type(request: Request) -> None:
             detail=f"Content-Type must be {OTLP_CONTENT_TYPE}",
         )
 
+
+# ============================================================
+# TRACE HELPERS
+# ============================================================
 
 def _load_existing_span_keys(
     db: Session,
@@ -152,34 +165,40 @@ def _load_existing_span_keys(
     return existing
 
 
-def _observed_at(record: dict) -> datetime:
-    """Convert a span's start timestamp into a timezone-aware datetime."""
+def _observed_at(record: dict[str, Any]) -> datetime:
+    """Convert a span timestamp into a timezone-aware datetime."""
 
     timestamp_ns = record.get("start_time_unix_nano")
 
-    if not isinstance(timestamp_ns, int) or timestamp_ns <= 0:
+    if not isinstance(timestamp_ns, int) or isinstance(timestamp_ns, bool) or timestamp_ns <= 0:
         timestamp_ns = record.get("end_time_unix_nano")
 
-    if not isinstance(timestamp_ns, int) or timestamp_ns <= 0:
+    if not isinstance(timestamp_ns, int) or isinstance(timestamp_ns, bool) or timestamp_ns <= 0:
         return datetime.now(timezone.utc)
 
-    return datetime.fromtimestamp(
-        timestamp_ns / 1_000_000_000,
-        tz=timezone.utc,
-    )
+    try:
+        return datetime.fromtimestamp(
+            timestamp_ns / 1_000_000_000,
+            tz=timezone.utc,
+        )
+    except (OverflowError, OSError, ValueError):
+        return datetime.now(timezone.utc)
 
 
 def _span_fingerprint(trace_id: str, span_id: str) -> str:
     """Create a stable fingerprint for a trace span."""
 
     identity = f"{trace_id}:{span_id}"
-    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+    return hashlib.sha256(
+        identity.encode("utf-8")
+    ).hexdigest()
 
 
 def _persist_project_traces(
     db: Session,
     project_id: int,
-    records: list[dict],
+    records: list[dict[str, Any]],
 ) -> tuple[int, int]:
     """
     Persist normalized trace spans for one authenticated project.
@@ -187,11 +206,6 @@ def _persist_project_traces(
     Returns:
         accepted span count, duplicate span count
     """
-
-    span_keys = {
-        (record["trace_id"], record["span_id"])
-        for record in records
-    }
 
     existing_statement = select(
         TelemetryRecord.trace_id,
@@ -236,6 +250,188 @@ def _persist_project_traces(
 
     return accepted, duplicates
 
+
+# ============================================================
+# LOG HELPERS
+# ============================================================
+
+def _log_observed_at(record: dict[str, Any]) -> datetime:
+    """
+    Determine the event timestamp for an OTLP log record.
+
+    Prefer the event timestamp. If it is unavailable, use the
+    collector's observed timestamp. Fall back to current UTC time.
+    """
+
+    timestamp_ns = record.get("timestamp_unix_nano")
+
+    if not isinstance(timestamp_ns, int) or isinstance(timestamp_ns, bool) or timestamp_ns <= 0:
+        timestamp_ns = record.get("observed_timestamp_unix_nano")
+
+    if not isinstance(timestamp_ns, int) or isinstance(timestamp_ns, bool) or timestamp_ns <= 0:
+        return datetime.now(timezone.utc)
+
+    try:
+        return datetime.fromtimestamp(
+            timestamp_ns / 1_000_000_000,
+            tz=timezone.utc,
+        )
+    except (OverflowError, OSError, ValueError):
+        return datetime.now(timezone.utc)
+
+
+def _log_fingerprint(record: dict[str, Any]) -> str:
+    """
+    Create a stable grouping fingerprint for similar log events.
+
+    This fingerprint does NOT deduplicate log records.
+    Every received log event is persisted.
+    """
+
+    identity = json.dumps(
+        [
+            record.get("service_name", ""),
+            record.get("severity_number", 0),
+            record.get("severity_text", ""),
+            record.get("body", ""),
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+    return hashlib.sha256(
+        identity.encode("utf-8")
+    ).hexdigest()
+
+
+def _persist_project_logs(
+    db: Session,
+    project_id: int,
+    records: list[dict[str, Any]],
+) -> int:
+    """
+    Persist normalized log records for one authenticated project.
+
+    Logs are intentionally not deduplicated. Two identical messages
+    can represent two distinct events at different times.
+    """
+
+    for record in records:
+        telemetry = TelemetryRecord(
+            project_id=project_id,
+            signal_type="log",
+            service_name=record["service_name"],
+            observed_at=_log_observed_at(record),
+            trace_id=record.get("trace_id"),
+            span_id=record.get("span_id"),
+            fingerprint=_log_fingerprint(record),
+            payload=record,
+        )
+
+        db.add(telemetry)
+
+    return len(records)
+
+
+# ============================================================
+# METRIC HELPERS
+# ============================================================
+
+def _metric_observed_at(record: dict[str, Any]) -> datetime:
+    """
+    Determine the observation timestamp for an OTLP metric data point.
+
+    Prefer the point timestamp, then its start timestamp.
+    Fall back to current UTC time if neither is available.
+    """
+
+    data_point = record.get("data_point")
+
+    if not isinstance(data_point, dict):
+        data_point = {}
+
+    timestamp_ns = data_point.get("time_unix_nano")
+
+    if not isinstance(timestamp_ns, int) or isinstance(timestamp_ns, bool) or timestamp_ns <= 0:
+        timestamp_ns = data_point.get("start_time_unix_nano")
+
+    if not isinstance(timestamp_ns, int) or isinstance(timestamp_ns, bool) or timestamp_ns <= 0:
+        return datetime.now(timezone.utc)
+
+    try:
+        return datetime.fromtimestamp(
+            timestamp_ns / 1_000_000_000,
+            tz=timezone.utc,
+        )
+    except (OverflowError, OSError, ValueError):
+        return datetime.now(timezone.utc)
+
+
+def _metric_fingerprint(record: dict[str, Any]) -> str:
+    """
+    Create a stable grouping fingerprint for a metric time series.
+
+    Points belonging to the same service, metric, type, unit, and
+    attribute set share a fingerprint. Individual observations are
+    never deduplicated.
+    """
+
+    data_point = record.get("data_point")
+
+    if not isinstance(data_point, dict):
+        data_point = {}
+
+    identity = json.dumps(
+        [
+            record.get("service_name", ""),
+            record.get("metric_name", ""),
+            record.get("metric_type", ""),
+            record.get("unit", ""),
+            data_point.get("attributes", {}),
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+    return hashlib.sha256(
+        identity.encode("utf-8")
+    ).hexdigest()
+
+
+def _persist_project_metrics(
+    db: Session,
+    project_id: int,
+    records: list[dict[str, Any]],
+) -> int:
+    """
+    Persist normalized metric data points for one authenticated project.
+
+    Every received data point is persisted. Repeated observations
+    are not deduplicated.
+    """
+
+    for record in records:
+        telemetry = TelemetryRecord(
+            project_id=project_id,
+            signal_type="metric",
+            service_name=record["service_name"],
+            observed_at=_metric_observed_at(record),
+            trace_id=None,
+            span_id=None,
+            fingerprint=_metric_fingerprint(record),
+            payload=record,
+        )
+
+        db.add(telemetry)
+
+    return len(records)
+
+
+# ============================================================
+# PROJECT-LEVEL OTLP TRACE INGESTION
+# ============================================================
 
 @router.post("/v1/traces")
 async def ingest_project_otlp_traces(
@@ -286,7 +482,7 @@ async def ingest_project_otlp_traces(
         db.rollback()
 
         logger.exception(
-            "Failed to persist project telemetry for project %s",
+            "Failed to persist project traces for project %s",
             project.id,
         )
 
@@ -302,6 +498,149 @@ async def ingest_project_otlp_traces(
         "duplicate_spans": duplicates,
     }
 
+
+# ============================================================
+# PROJECT-LEVEL OTLP LOG INGESTION
+# ============================================================
+
+@router.post("/v1/logs")
+async def ingest_project_otlp_logs(
+    request: Request,
+    x_otlp_api_key: str | None = Header(
+        default=None,
+        alias="X-OTLP-API-Key",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Ingest OTLP logs into the project identified by its API key.
+
+    Every log event is persisted, including repeated messages.
+    No incident ID is required.
+    """
+
+    project = authenticate_project_api_key(db, x_otlp_api_key)
+
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid telemetry API key",
+        )
+
+    _validate_otlp_content_type(request)
+
+    body = await _read_limited_body(request)
+
+    try:
+        records = parse_otlp_logs(body)
+    except TelemetryPayloadError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        accepted = _persist_project_logs(
+            db=db,
+            project_id=project.id,
+            records=records,
+        )
+
+        db.commit()
+
+    except SQLAlchemyError as exc:
+        db.rollback()
+
+        logger.exception(
+            "Failed to persist project logs for project %s",
+            project.id,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist telemetry",
+        ) from exc
+
+    return {
+        "project_id": project.id,
+        "received_logs": len(records),
+        "accepted_logs": accepted,
+    }
+
+
+# ============================================================
+# PROJECT-LEVEL OTLP METRIC INGESTION
+# ============================================================
+
+@router.post("/v1/metrics")
+async def ingest_project_otlp_metrics(
+    request: Request,
+    x_otlp_api_key: str | None = Header(
+        default=None,
+        alias="X-OTLP-API-Key",
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    Ingest OTLP metrics into the project identified by its API key.
+
+    Each normalized metric data point is persisted separately.
+    Metric metadata and the complete data-point structure are
+    retained in the TelemetryRecord payload.
+    """
+
+    project = authenticate_project_api_key(db, x_otlp_api_key)
+
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid telemetry API key",
+        )
+
+    _validate_otlp_content_type(request)
+
+    body = await _read_limited_body(request)
+
+    try:
+        records = parse_otlp_metrics(body)
+    except TelemetryPayloadError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        accepted = _persist_project_metrics(
+            db=db,
+            project_id=project.id,
+            records=records,
+        )
+
+        db.commit()
+
+    except SQLAlchemyError as exc:
+        db.rollback()
+
+        logger.exception(
+            "Failed to persist project metrics for project %s",
+            project.id,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist telemetry",
+        ) from exc
+
+    return {
+        "project_id": project.id,
+        "received_data_points": len(records),
+        "accepted_data_points": accepted,
+    }
+
+
+# ============================================================
+# LEGACY INCIDENT-LEVEL TRACE INGESTION
+# ============================================================
 
 @router.post("/incidents/{incident_id}/telemetry/v1/traces")
 async def ingest_otlp_traces(
@@ -389,6 +728,10 @@ async def ingest_otlp_traces(
         "duplicate_spans": duplicates,
     }
 
+
+# ============================================================
+# SERVICE TOPOLOGY
+# ============================================================
 
 @router.get("/incidents/{incident_id}/service-topology")
 def get_service_topology(
