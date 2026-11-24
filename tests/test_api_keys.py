@@ -23,6 +23,9 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
 )
 
 from app.db_models import TelemetryRecord
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
+    ExportLogsServiceRequest,
+)
 
 
 @pytest.fixture
@@ -644,6 +647,237 @@ def test_project_trace_ingestion_rejects_empty_payload(api_key_client):
 
     response = client.post(
         "/v1/traces",
+        content=b"",
+        headers={
+            "X-OTLP-API-Key": api_key,
+            "Content-Type": "application/x-protobuf",
+        },
+    )
+
+    assert response.status_code == 400
+
+
+
+def build_otlp_log_payload(
+    service_name="checkout-service",
+    body="Database connection failed",
+    severity_number=17,
+    severity_text="ERROR",
+):
+    """Build a realistic OTLP logs request for integration tests."""
+
+    request = ExportLogsServiceRequest()
+
+    resource_logs = request.resource_logs.add()
+
+    service_attribute = resource_logs.resource.attributes.add()
+    service_attribute.key = "service.name"
+    service_attribute.value.string_value = service_name
+
+    scope_logs = resource_logs.scope_logs.add()
+
+    log_record = scope_logs.log_records.add()
+    log_record.time_unix_nano = 1_700_000_000_000_000_000
+    log_record.observed_time_unix_nano = 1_700_000_001_000_000_000
+    log_record.severity_number = severity_number
+    log_record.severity_text = severity_text
+    log_record.body.string_value = body
+
+    log_record.trace_id = bytes([1]) * 16
+    log_record.span_id = bytes([2]) * 8
+    log_record.event_name = "database.error"
+
+    attribute = log_record.attributes.add()
+    attribute.key = "db.system"
+    attribute.value.string_value = "postgresql"
+
+    return request.SerializeToString()
+
+
+def test_project_log_ingestion_persists_telemetry(api_key_client):
+    client, session_factory = api_key_client
+
+    registration, api_key = create_collector_key(client)
+
+    payload = build_otlp_log_payload()
+
+    response = client.post(
+        "/v1/logs",
+        content=payload,
+        headers={
+            "X-OTLP-API-Key": api_key,
+            "Content-Type": "application/x-protobuf",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "project_id": registration["project_id"],
+        "received_logs": 1,
+        "accepted_logs": 1,
+    }
+
+    db = session_factory()
+
+    try:
+        telemetry = db.query(TelemetryRecord).one()
+
+        assert telemetry.project_id == registration["project_id"]
+        assert telemetry.signal_type == "log"
+        assert telemetry.service_name == "checkout-service"
+        assert telemetry.trace_id == "01" * 16
+        assert telemetry.span_id == "02" * 8
+        assert telemetry.fingerprint is not None
+
+        assert telemetry.payload["body"] == "Database connection failed"
+        assert telemetry.payload["severity_number"] == 17
+        assert telemetry.payload["severity_text"] == "ERROR"
+        assert telemetry.payload["event_name"] == "database.error"
+        assert telemetry.payload["attributes"]["db.system"] == "postgresql"
+
+        assert telemetry.observed_at.replace(
+            tzinfo=timezone.utc
+        ) == datetime(
+            2023, 11, 14, 22, 13, 20, tzinfo=timezone.utc
+        )
+
+    finally:
+        db.close()
+
+
+def test_project_log_ingestion_rejects_missing_api_key(api_key_client):
+    client, _ = api_key_client
+
+    response = client.post(
+        "/v1/logs",
+        content=build_otlp_log_payload(),
+        headers={
+            "Content-Type": "application/x-protobuf",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_project_log_ingestion_rejects_invalid_api_key(api_key_client):
+    client, _ = api_key_client
+
+    response = client.post(
+        "/v1/logs",
+        content=build_otlp_log_payload(),
+        headers={
+            "X-OTLP-API-Key": "opsp_live_invalid",
+            "Content-Type": "application/x-protobuf",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_project_log_ingestion_rejects_revoked_api_key(api_key_client):
+    client, _ = api_key_client
+
+    registration, api_key = create_collector_key(client)
+
+    key_response = client.get(
+        f"/projects/{registration['project_id']}/api-keys"
+    )
+
+    assert key_response.status_code == 200
+
+    key_id = key_response.json()["api_keys"][0]["id"]
+
+    revoke_response = client.delete(
+        f"/projects/{registration['project_id']}/api-keys/{key_id}",
+        headers=csrf_headers(client),
+    )
+
+    assert revoke_response.status_code == 204
+
+    response = client.post(
+        "/v1/logs",
+        content=build_otlp_log_payload(),
+        headers={
+            "X-OTLP-API-Key": api_key,
+            "Content-Type": "application/x-protobuf",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_project_log_ingestion_preserves_identical_events(api_key_client):
+    client, session_factory = api_key_client
+
+    _, api_key = create_collector_key(client)
+
+    headers = {
+        "X-OTLP-API-Key": api_key,
+        "Content-Type": "application/x-protobuf",
+    }
+
+    payload = build_otlp_log_payload()
+
+    first_response = client.post(
+        "/v1/logs",
+        content=payload,
+        headers=headers,
+    )
+
+    second_response = client.post(
+        "/v1/logs",
+        content=payload,
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert first_response.json()["accepted_logs"] == 1
+
+    assert second_response.status_code == 200
+    assert second_response.json()["accepted_logs"] == 1
+
+    db = session_factory()
+
+    try:
+        records = db.query(TelemetryRecord).all()
+
+        assert len(records) == 2
+        assert all(
+            record.signal_type == "log"
+            for record in records
+        )
+
+        # Same grouping fingerprint, but two separate stored events.
+        assert records[0].fingerprint == records[1].fingerprint
+
+    finally:
+        db.close()
+
+
+def test_project_log_ingestion_rejects_wrong_content_type(api_key_client):
+    client, _ = api_key_client
+
+    _, api_key = create_collector_key(client)
+
+    response = client.post(
+        "/v1/logs",
+        content=build_otlp_log_payload(),
+        headers={
+            "X-OTLP-API-Key": api_key,
+            "Content-Type": "application/json",
+        },
+    )
+
+    assert response.status_code == 415
+
+
+def test_project_log_ingestion_rejects_empty_payload(api_key_client):
+    client, _ = api_key_client
+
+    _, api_key = create_collector_key(client)
+
+    response = client.post(
+        "/v1/logs",
         content=b"",
         headers={
             "X-OTLP-API-Key": api_key,
